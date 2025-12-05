@@ -3,61 +3,197 @@
 
 #include <array>
 #include <cstddef>
+#include <iostream>
+#include <vector>
+#include <algorithm>
 
-// Template class for KDTree with K dimensions
+// A balanced K-Dimensional tree using median-based splitting
+// K is the number of dimensions in the space
+
 template <size_t K>
 class KDTree {
 private:
-    // Node structure representing each point in the KDTree
     struct Node {
-        // Point in K dimensions
-        std::array<double, K> point;
-        // Pointer to left child
-        Node* left;
-        // Pointer to right child
-        Node* right;
+        std::array<double, K> point;   // Point coordinates in K dimensions
+        Node* left;                    // Pointer to left child (points with smaller coordinate)
+        Node* right;                   // Pointer to right child (points with larger coordinate)
         
-        // Constructor to initialize a Node
-        Node(const std::array<double, K>& pt);
+        // Constructs a new Node
+        Node(const std::array<double, K>& pt) 
+            : point(pt), left(nullptr), right(nullptr) {}
     };
     
-    // Root of the KDTree
-    Node* root;
+    Node* root;  // Root node of the KD-tree
     
-    // Recursive function to insert a point into the KDTree
-    Node* insertRecursive(Node* node, const std::array<double, K>& point, int depth);
+    // Recursively builds a balanced KD-tree using median splitting
+    Node* buildTree(std::vector<std::array<double, K>>& points, 
+                    int start, int end, int depth) {
+        // Base case: no points to process
+        if (start >= end) {
+            return nullptr;
+        }
+        
+        // Calculate current dimension (cycles through 0 to K-1)
+        int cd = depth % K;
+        
+        // Find median index
+        int mid = start + (end - start) / 2;
+        
+        // Partition around median using nth_element
+        // This puts the median at position 'mid' and partitions around it
+        std::nth_element(points.begin() + start, 
+                        points.begin() + mid, 
+                        points.begin() + end,
+                        [cd](const std::array<double, K>& a, 
+                             const std::array<double, K>& b) {
+                            return a[cd] < b[cd];
+                        });
+        
+        // Create node with median point
+        Node* node = new Node(points[mid]);
+        
+        // Recursively build left and right subtrees
+        node->left = buildTree(points, start, mid, depth + 1);
+        node->right = buildTree(points, mid + 1, end, depth + 1);
+        
+        return node;
+    }
     
-    // Recursive function to search for a point in the KDTree
-    bool searchRecursive(Node* node, const std::array<double, K>& point, int depth) const;
+    // Recursively searches for a point in the KD-tree
+    bool searchRecursive(Node* node, const std::array<double, K>& point, int depth) const {
+        // Base case: reached a leaf (point not found)
+        if (node == nullptr) {
+            return false;
+        }
+        
+        // Check if current node matches the search point
+        if (node->point == point) {
+            return true;
+        }
+        
+        // Calculate current dimension (cycles through 0 to K-1)
+        int cd = depth % K;
+        
+        // Recurse down the appropriate subtree based on current dimension
+        if (point[cd] < node->point[cd]) {
+            return searchRecursive(node->left, point, depth + 1);
+        } else if (point[cd] > node->point[cd]) {
+            return searchRecursive(node->right, point, depth + 1);
+        } else {
+            // When coordinates are equal, point could be in EITHER subtree
+            return searchRecursive(node->left, point, depth + 1) ||
+                   searchRecursive(node->right, point, depth + 1);
+        }
+    }
     
-    // Recursive function to print the KDTree
-    void printRecursive(Node* node, int depth) const;
+    // Recursively prints the KD-tree structure
+    void printRecursive(Node* node, int depth) const {
+        // Base case: null node, nothing to print
+        if (node == nullptr) {
+            return;
+        }
+        
+        // Print indentation based on depth
+        for (int i = 0; i < depth; i++) {
+            std::cout << "  ";
+        }
+        
+        // Print the point coordinates with the splitting dimension
+        std::cout << "(";
+        for (size_t i = 0; i < K; i++) {
+            std::cout << node->point[i];
+            if (i < K - 1) {
+                std::cout << ", ";
+            }
+        }
+        std::cout << ") [dim=" << (depth % K) << "]" << std::endl;
+        
+        // Recursively print left and right subtrees
+        printRecursive(node->left, depth + 1);
+        printRecursive(node->right, depth + 1);
+    }
     
-    // Recursive function to delete all nodes
-    void deleteRecursive(Node* node);
+    // Recursively deletes all nodes in the tree
+    void deleteRecursive(Node* node) {
+        if (node == nullptr) return;
+        
+        // Post-order traversal: delete children first
+        deleteRecursive(node->left);
+        deleteRecursive(node->right);
+        delete node;
+    }
+    
+    // Recursively collects all points from the tree
+    void collectPoints(Node* node, std::vector<std::array<double, K>>& points) const {
+        if (node == nullptr) return;
+        
+        points.push_back(node->point);
+        collectPoints(node->left, points);
+        collectPoints(node->right, points);
+    }
 
 public:
-    // Constructor to initialize the KDTree with a null root
-    KDTree();
+    // Constructs an empty KD-tree
+    KDTree() : root(nullptr) {}
     
-    // Destructor to clean up memory
-    ~KDTree();
+    // Constructs a balanced KD-tree from a vector of points
+    KDTree(std::vector<std::array<double, K>> points) : root(nullptr) {
+        if (!points.empty()) {
+            root = buildTree(points, 0, points.size(), 0);
+        }
+    }
     
-    // Delete copy constructor and assignment operator
+    // Destroys the KD-tree and frees all memory
+    ~KDTree() {
+        deleteRecursive(root);
+    }
+    
+    // Deleted copy constructor to prevent shallow copies
     KDTree(const KDTree&) = delete;
+    
+    // Deleted assignment operator to prevent shallow copies
     KDTree& operator=(const KDTree&) = delete;
     
-    // Public function to insert a point into the KDTree
-    void insert(const std::array<double, K>& point);
+    // Builds a balanced KD-tree from a vector of points
+    void build(std::vector<std::array<double, K>> points) {
+        // Delete existing tree
+        deleteRecursive(root);
+        root = nullptr;
+        
+        // Build new tree
+        if (!points.empty()) {
+            root = buildTree(points, 0, points.size(), 0);
+        }
+    }
     
-    // Public function to search for a point in the KDTree
-    bool search(const std::array<double, K>& point) const;
+    // Inserts a single point and rebuilds the tree (inefficient)
+    // NOTE: This is inefficient (O(n log n)) as it rebuilds the entire tree.
+    void insert(const std::array<double, K>& point) {
+        // Collect all existing points
+        std::vector<std::array<double, K>> points;
+        collectPoints(root, points);
+        
+        // Add new point
+        points.push_back(point);
+        
+        // Rebuild tree
+        build(points);
+    }
     
-    // Public function to print the KDTree
-    void print() const;
+    // Searches for a point in the KD-tree
+    bool search(const std::array<double, K>& point) const {
+        return searchRecursive(root, point, 0);
+    }
+    
+    // Prints the tree structure to standard output
+    void print() const {
+        printRecursive(root, 0);
+    }
+    
+    // Checks if the tree is empty
+    bool empty() const {
+        return root == nullptr;
+    }
 };
-
-// Include implementation for template class
-#include "KDTree.cpp"
 
 #endif // KDTREE_HPP
