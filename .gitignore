@@ -33,3 +33,6 @@
 
 # CSV files
 **/*.csv
+
+# Python translation of the notebook (for convenience)
+script/generate_data.py
