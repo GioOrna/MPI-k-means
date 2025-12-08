@@ -6,12 +6,36 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <cassert>
+
+
+// Epsilon comparison helpers
+
+inline bool approxEqual(double a, double b, double eps = 1e-9) {
+    double diff = std::abs(a - b);
+    double scale = std::max(1.0, std::max(std::abs(a), std::abs(b)));
+    return diff <= eps * scale;
+}
+
+template <size_t K>
+bool approxEqualPoint(const std::array<double, K>& a,
+                      const std::array<double, K>& b,
+                      double eps = 1e-9) {
+    for (size_t i = 0; i < K; ++i) {
+        if (!approxEqual(a[i], b[i], eps))
+            return false;
+    }
+    return true;
+}
+
 
 // A balanced K-Dimensional tree using median-based splitting
 // K is the number of dimensions in the space
 
 template <size_t K>
 class KDTree {
+    static_assert(K > 0, "K must be > 0");
+
 private:
     struct Node {
         std::array<double, K> point;   // Point coordinates in K dimensions
@@ -60,30 +84,33 @@ private:
     }
     
     // Recursively searches for a point in the KD-tree
-    bool searchRecursive(Node* node, const std::array<double, K>& point, int depth) const {
+    bool searchRecursive(Node* node,
+                        const std::array<double, K>& point,
+                        int depth,
+                        double eps = 1e-9) const {
         // Base case: reached a leaf (point not found)
         if (node == nullptr) {
             return false;
         }
         
-        // Check if current node matches the search point
-        if (node->point == point) {
+        // Check if points are equal within tolerance
+        if (approxEqualPoint<K>(node->point, point, eps)) {
             return true;
         }
-        
+
         // Calculate current dimension (cycles through 0 to K-1)
         int cd = depth % K;
-        
+
         // Recurse down the appropriate subtree based on current dimension
-        if (point[cd] < node->point[cd]) {
-            return searchRecursive(node->left, point, depth + 1);
-        } else if (point[cd] > node->point[cd]) {
-            return searchRecursive(node->right, point, depth + 1);
-        } else {
-            // When coordinates are equal, point could be in EITHER subtree
-            return searchRecursive(node->left, point, depth + 1) ||
-                   searchRecursive(node->right, point, depth + 1);
+        if (approxEqual(point[cd], node->point[cd], eps)) {
+            return searchRecursive(node->left, point, depth + 1, eps) ||
+                   searchRecursive(node->right, point, depth + 1, eps);
         }
+        if (point[cd] < node->point[cd]) {
+            return searchRecursive(node->left, point, depth + 1, eps);
+        } else {
+            return searchRecursive(node->right, point, depth + 1, eps);
+        } 
     }
     
     // Recursively prints the KD-tree structure
