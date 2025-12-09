@@ -3,8 +3,10 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <random>
 
 #include "../include/csv_utils.hpp"
+#include "../include/KDTree.hpp"
 
 using namespace std;
 
@@ -32,6 +34,12 @@ using namespace std;
 vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>&,
 										 MPI_Comm);
 
+										 
+vector<vector<double>> generate_centroids(const int num_centroids,
+										 const size_t dim,
+										 const vector<double>& max_values,
+										 const vector<double>& min_values);
+
 int main(int argc, char* argv[]) {
 	MPI_Init(&argc, &argv);
 	MPI_Comm mpi_comm = MPI_COMM_WORLD;
@@ -41,8 +49,18 @@ int main(int argc, char* argv[]) {
 
 	vector<vector<double>> data;
 	MPI_master() {
-		if(argc != 2) {
-			cerr << "Usage: " << argv[0] << " <path_to_file>" << endl;
+		if(argc != 3) {
+			cerr << "Usage: " << argv[0] << " <path_to_file> <number_of_centroids>" << endl;
+			MPI_Abort(mpi_comm, 1);
+		}
+		int num_centroids;
+		try {
+			num_centroids = std::stoul(argv[2]);
+			if(num_centroids < 1){
+				throw std::invalid_argument("Number of centroids must be at least 1.");
+			}
+		} catch(const std::exception& e) {
+			cerr << "Invalid number of centroids: " << argv[2] << endl;
 			MPI_Abort(mpi_comm, 1);
 		}
 
@@ -57,21 +75,60 @@ int main(int argc, char* argv[]) {
 		// Finally, it's easier for code readability and ease of coding to just
 		// do it on the master process and then scatter the data to the other
 		// processes.
+		vector<double> max_values;
+		vector<double> min_values;
 		try {
-			data = readCSV(argv[1], true);
+			data = readCSV(argv[1], true, max_values, min_values);
 		} catch(const exception& e) {
 			cerr << "Error reading CSV file: " << e.what() << endl;
 			MPI_Abort(mpi_comm, 1);
 		}
+		KDTree tree(data); // generate KDTree from data
+		vector<vector<double>> centroids = generate_centroids(
+			num_centroids, data[0].size(), max_values, min_values);
+		
+		int l =0;
+		for (auto& centroid : centroids){
+			cout << "centroid:" << l << endl;
+			++l;
+			for(size_t i=0; i < centroid.size(); ++i){
+				cout << "Centroid dim " << i << ": " << centroid[i] << endl;
+			}
+		}
+		
 	}
+	MPI_Barrier(mpi_comm); // synchronize all ranks
+
 
 	// Scatter the data evenly among all processes.
-	vector<vector<double>> local_data = MPI_evenlyScatterData(data, mpi_comm);
+	//vector<vector<double>> local_data = MPI_evenlyScatterData(data, mpi_comm);
 
 	// All processes can now work on their portion of the data
 	
 	MPI_Finalize();
 }
+
+vector<vector<double>> generate_centroids(const int num_centroids,
+										 const size_t dim,
+										 const vector<double>& max_values,
+										 const vector<double>& min_values) {
+	random_device rd;                // non-deterministic seed
+    mt19937 gen(rd());               // Mersenne Twister engine
+    vector<uniform_real_distribution<double>> dist;  // ranges
+	dist.resize(dim);
+	for(size_t i = 0; i < dim; ++i) {  // for each dimension define max and min
+		dist[i] = std::uniform_real_distribution<double>(min_values[i], max_values[i]);
+	}
+	vector<vector<double>> centroids;
+	centroids.resize(num_centroids); 
+	for(size_t i = 0; i < num_centroids; ++i) { // for each centroid
+		centroids[i].resize(dim);
+		for(size_t j = 0; j < dim; ++j){  // for each dimension
+			centroids[i][j] = dist[j](gen);
+		}
+	}
+	return centroids;
+}	
 
 vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 										 MPI_Comm mpi_comm) {
