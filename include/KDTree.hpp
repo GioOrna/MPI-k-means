@@ -17,11 +17,10 @@ inline bool approxEqual(double a, double b, double eps = 1e-9) {
     return diff <= eps * scale;
 }
 
-template <size_t K>
-bool approxEqualPoint(const std::array<double, K>& a,
-                      const std::array<double, K>& b,
+bool approxEqualPoint(const std::vector<double>& a,
+                      const std::vector<double>& b,
                       double eps = 1e-9) {
-    for (size_t i = 0; i < K; ++i) {
+    for (size_t i = 0; i < a.size(); ++i) {
         if (!approxEqual(a[i], b[i], eps))
             return false;
     }
@@ -32,25 +31,23 @@ bool approxEqualPoint(const std::array<double, K>& a,
 // A balanced K-Dimensional tree using median-based splitting
 // K is the number of dimensions in the space
 
-template <size_t K>
 class KDTree {
-    static_assert(K > 0, "K must be > 0");
-
 private:
     struct Node {
-        std::array<double, K> point;   // Point coordinates in K dimensions
+        std::vector<double> point;   // Point coordinates in K dimensions
         Node* left;                    // Pointer to left child (points with smaller coordinate)
         Node* right;                   // Pointer to right child (points with larger coordinate)
         
         // Constructs a new Node
-        Node(const std::array<double, K>& pt) 
+        Node(const std::vector<double>& pt) 
             : point(pt), left(nullptr), right(nullptr) {}
     };
     
     Node* root;  // Root node of the KD-tree
+    size_t K;   // Number of dimensions
     
     // Recursively builds a balanced KD-tree using median splitting
-    Node* buildTree(std::vector<std::array<double, K>>& points, 
+    Node* buildTree(std::vector<std::vector<double>>& points, 
                     int start, int end, int depth) {
         // Base case: no points to process
         if (start >= end) {
@@ -68,8 +65,8 @@ private:
         std::nth_element(points.begin() + start, 
                         points.begin() + mid, 
                         points.begin() + end,
-                        [cd](const std::array<double, K>& a, 
-                             const std::array<double, K>& b) {
+                        [cd](const std::vector<double>& a, 
+                             const std::vector<double>& b) {
                             return a[cd] < b[cd];
                         });
         
@@ -85,7 +82,7 @@ private:
     
     // Recursively searches for a point in the KD-tree
     bool searchRecursive(Node* node,
-                        const std::array<double, K>& point,
+                        const std::vector<double>& point,
                         int depth,
                         double eps = 1e-9) const {
         // Base case: reached a leaf (point not found)
@@ -94,7 +91,7 @@ private:
         }
         
         // Check if points are equal within tolerance
-        if (approxEqualPoint<K>(node->point, point, eps)) {
+        if (approxEqualPoint(node->point, point, eps)) {
             return true;
         }
 
@@ -151,7 +148,7 @@ private:
     }
     
     // Recursively collects all points from the tree
-    void collectPoints(Node* node, std::vector<std::array<double, K>>& points) const {
+    void collectPoints(Node* node, std::vector<std::vector<double>>& points) const {
         if (node == nullptr) return;
         
         points.push_back(node->point);
@@ -161,11 +158,12 @@ private:
 
 public:
     // Constructs an empty KD-tree
-    KDTree() : root(nullptr) {}
+    KDTree(size_t dimension) : root(nullptr), K(dimension) {}
     
     // Constructs a balanced KD-tree from a vector of points
-    KDTree(std::vector<std::array<double, K>> points) : root(nullptr) {
+    KDTree(std::vector<std::vector<double>> points) : root(nullptr) {
         if (!points.empty()) {
+            K = points[0].size();
             root = buildTree(points, 0, points.size(), 0);
         }
     }
@@ -182,22 +180,23 @@ public:
     KDTree& operator=(const KDTree&) = delete;
     
     // Builds a balanced KD-tree from a vector of points
-    void build(std::vector<std::array<double, K>> points) {
+    void build(std::vector<std::vector<double>> points) {
         // Delete existing tree
         deleteRecursive(root);
         root = nullptr;
         
         // Build new tree
         if (!points.empty()) {
+            K = points[0].size();
             root = buildTree(points, 0, points.size(), 0);
         }
     }
     
     // Inserts a single point and rebuilds the tree (inefficient)
     // NOTE: This is inefficient (O(n log n)) as it rebuilds the entire tree.
-    void insert(const std::array<double, K>& point) {
+    void insert(const std::vector<double>& point) {
         // Collect all existing points
-        std::vector<std::array<double, K>> points;
+        std::vector<std::vector<double>> points;
         collectPoints(root, points);
         
         // Add new point
@@ -208,7 +207,7 @@ public:
     }
     
     // Searches for a point in the KD-tree
-    bool search(const std::array<double, K>& point) const {
+    bool search(const std::vector<double>& point) const {
         return searchRecursive(root, point, 0);
     }
     

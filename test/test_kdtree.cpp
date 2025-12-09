@@ -1,5 +1,5 @@
 
-#include "KDTree.hpp"
+#include "../include/KDTree.hpp"
 #include <iostream>
 #include <array>
 #include <iomanip>
@@ -20,11 +20,11 @@ int main() {
     
     printTestHeader("Balanced 2D Tree - Median-Based Construction");
     
-    vector<array<double, 2>> points2D = {
+    vector<vector<double>> points2D = {
         {3, 6}, {2, 2}, {4, 7}, {1, 3}, {2, 4}, {5, 4}, {7, 2}
     };
     
-    KDTree<2> tree2D(points2D);
+    KDTree tree2D(points2D);
     
     cout << "Building balanced tree from 7 points." << endl;
     tree2D.print();
@@ -44,7 +44,7 @@ int main() {
     
     printTestHeader("Search for Non-existing Points");
     
-    vector<array<double, 2>> nonExistingPoints = {
+    vector<vector<double>> nonExistingPoints = {
         {0, 0}, {6, 3}, {10, 10}, {3, 3}, {5, 5}
     };
     
