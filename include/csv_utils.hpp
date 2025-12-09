@@ -12,6 +12,8 @@
  *	the CSV file.
  */
 std::vector<std::vector<double>> readCSV(const std::string& filename,
-										 bool skip_header = false);
+										 bool skip_header = false,
+										 std::vector<double>& max_values = *(new std::vector<double>()),
+										 std::vector<double>& min_values = *(new std::vector<double>()));
 
 #endif // CSV_UTILS_HPP
