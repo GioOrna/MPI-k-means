@@ -7,6 +7,8 @@
 #include <vector>
 #include <algorithm>
 #include <cassert>
+#include <fstream>
+
 
 
 // Epsilon comparison helpers
@@ -32,15 +34,37 @@ bool approxEqualPoint(const std::vector<double>& a,
 // K is the number of dimensions in the space
 
 class KDTree {
-private:
+public:
     struct Node {
+    private:
         std::vector<double> point;   // Point coordinates in K dimensions
         Node* left;                    // Pointer to left child (points with smaller coordinate)
         Node* right;                   // Pointer to right child (points with larger coordinate)
-        
+        mutable int cluster;                  // Cluster assignment
         // Constructs a new Node
+        friend class KDTree;
+    public:
         Node(const std::vector<double>& pt) 
-            : point(pt), left(nullptr), right(nullptr) {}
+            : point(pt), left(nullptr), right(nullptr), cluster(-1) {}
+        
+        std::vector<double> getPoint() const{
+            return point;
+        }
+
+        //navigate to the left of the node
+        const Node* getLeft() const{
+            return left;
+        }
+
+        //navigate to the right of the node
+        const Node* getRight() const{
+            return right;
+        }
+
+            //set cluster field of the node
+        void setCluster(int c) const{
+            cluster = c;
+        }
     };
     
     Node* root;  // Root node of the KD-tree
@@ -156,6 +180,24 @@ private:
         collectPoints(node->right, points);
     }
 
+void writeCSVRecursive(Node* node, std::ofstream& out) const {
+    if (!node) return;
+
+    // Write point coordinates
+    for (size_t i = 0; i < node->point.size(); ++i) {
+        out << node->point[i];
+        out << ",";
+    }
+    out << node->cluster;
+    out << "\n";
+
+    // Recurse
+    writeCSVRecursive(node->left, out);
+    writeCSVRecursive(node->right, out);
+}
+
+
+
 public:
     // Constructs an empty KD-tree
     KDTree(size_t dimension) : root(nullptr), K(dimension) {}
@@ -191,6 +233,7 @@ public:
             root = buildTree(points, 0, points.size(), 0);
         }
     }
+
     
     // Inserts a single point and rebuilds the tree (inefficient)
     // NOTE: This is inefficient (O(n log n)) as it rebuilds the entire tree.
@@ -220,6 +263,39 @@ public:
     bool empty() const {
         return root == nullptr;
     }
-};
+    
+    //return root node
+    const Node* getRoot(){
+        return root;
+    }
 
+    //append a point without checking if it's the right position
+    const Node* appendNode(const std::vector<double>& point){
+        Node* parsing_node = root;
+        while(parsing_node->right != nullptr){
+		    parsing_node = parsing_node->right;
+	    }
+        parsing_node->right = new KDTree::Node(point); //just to test the output file
+        return parsing_node->right;
+    }
+    
+    void writeCSV(const std::string& filename) const {
+    std::ofstream out(filename);
+    if (!out.is_open()) {
+        throw std::runtime_error("Failed to open file: " + filename);
+    }
+
+    // Header: x0,x1,...,x(K-1),splitDim
+    for (size_t i = 0; i < K; ++i) {
+        out << "x" << i;
+        if (i < K - 1) out << ",";
+    }
+    out << ",BelongingCluster\n";
+
+    writeCSVRecursive(root, out);
+
+    out.close();
+}
+    
+};
 #endif // KDTREE_HPP
