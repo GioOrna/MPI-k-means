@@ -58,4 +58,3 @@ vector<vector<double>> readCSV(const string& filename, bool skip_header, vector<
 	file.close();
 	return data;
 }
-

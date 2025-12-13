@@ -36,3 +36,4 @@
 
 # Python translation of the notebook (for convenience)
 script/generate_data.py
+script/visualize_data.py

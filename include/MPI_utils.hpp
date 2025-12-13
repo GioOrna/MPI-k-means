@@ -1,3 +1,5 @@
+#ifndef MPI_UTILS_HPP
+#define MPI_UTILS_HPP
 #include <mpi.h>
 #include <vector>
 
@@ -23,9 +25,38 @@ using namespace std;
  * @param data The 2D vector to scatter (only needed on master process).
  * @param mpi_comm The MPI communicator.
  * @return The portion of the data assigned to the calling process.
+ * @detail
+ * The input parameter 'data' is only required on the master process and the
+ * resulting scattered data is returned to all processes.
  */
 vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>&,
 										 MPI_Comm);
+
+/**
+ * @brief Gathers a vector of integers from all MPI processes, handling
+ * unbalanced sizes.
+ * @param local_clustering The local vector of integers from each process.
+ * @param comm The MPI communicator.
+ * @return The gathered vector of integers.
+ * @detail
+ * Only the master process will receive the complete gathered vector; other
+ * processes will receive an empty vector.
+ */
+vector<int> MPI_gatherUnbalancedData(const vector<int>&, MPI_Comm);
+
+/**
+ * @brief Computes the clustering employing all MPI processes.
+ * @param data The whole dataset.
+ * @param centroids The centroids on which to base the clustering.
+ * @return The clustering result as a vector of cluster indices.
+ * @detail
+ * The resulting vector has the same length as the number of data points and
+ * contains the index of the assigned centroid for each data point. Only the
+ * master process will have the complete clustering result; as well as the input
+ * parameters are expected to be valid only on the master process.
+ */
+vector<int> MPI_computeClustering(const vector<vector<double>>&,
+								  const vector<vector<double>>&);
 
 /**
  * @brief Flattens a 2D vector into a 1D vector.
@@ -52,3 +83,4 @@ vector<vector<double>> unflatten(const vector<double>& flat, int rows, int cols)
  * @return void
  */
 void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank, MPI_Comm mpi_comm);
+#endif // MPI_UTILS_HPP

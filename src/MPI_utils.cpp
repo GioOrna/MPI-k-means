@@ -1,4 +1,5 @@
 #include "../include/MPI_utils.hpp"
+#include "../include/kmeans.hpp"
 
 void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank, MPI_Comm mpi_comm) {
 	// Broadcast centroids to all processes.
@@ -58,9 +59,7 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 		remainder = total_rows % per_process_rows;
 
 		// Flatten the data.
-		flat_data.reserve(data.size() * total_cols);
-		for(const auto& row : data)
-			flat_data.insert(flat_data.end(), row.begin(), row.end());
+		flat_data = flatten(data);
 	}
 
 	// Send to all processes the data dimensions.
@@ -71,7 +70,9 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 	// Buffer send and displacements.
 	// Note: the master process gets more rows beacause it's a fake comunication
 	// the one between master and itself (especially in case of clusters), so it
-	// should be faster than the others (this is a naive optimization).
+	// should be faster than the others (this is a naive optimization). This
+	// implementation choice simplifies also the communication logic, indeed the
+	// sent `remainder` variable is mainly used by the master process.
 	int send_counts[size], displacements[size];
 
 	for(int i = 0; i < size; ++i) {
@@ -102,13 +103,66 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 				 0,
 				 mpi_comm);
 
-	// Reshape the local data into a 2D vector.
-	vector<vector<double>> reshaped(per_process_rows,
-									vector<double>(total_cols));
-	for(int i = 0; i < per_process_rows; ++i)
-		copy(local_data.begin()+i*total_cols,
-			 local_data.begin()+(i+1)*total_cols,
-			 reshaped[i].begin());
+	return unflatten(local_data, per_process_rows, total_cols);
+}
 
-	return reshaped;
+vector<int> MPI_gatherUnbalancedData(const vector<int>& local_clustering,
+									 MPI_Comm comm) {
+	int rank, size;
+	MPI_Comm_rank(comm, &rank);
+	MPI_Comm_size(comm, &size);
+
+	// Gather sizes of local clusterings.
+	int local_size = local_clustering.size();
+	vector<int> all_sizes(size);
+	MPI_Gather(&local_size, 1, MPI_INT, all_sizes.data(), 1, MPI_INT, 0, comm);
+
+	vector<int> displacements(size), full_clustering;
+	MPI_master() {
+		// Calculate displacements for gathering.
+		displacements[0] = 0;
+		for(int i = 1; i < size; ++i)
+			displacements[i] = displacements[i - 1] + all_sizes[i - 1];
+
+		// Gather all local clusterings to the master process.
+		int total_size = 0;
+		for(int sz : all_sizes)
+			total_size += sz;
+		full_clustering.resize(total_size);
+	}
+
+	MPI_Gatherv(local_clustering.data(),
+				local_size,
+				MPI_INT,
+				rank == 0 ? full_clustering.data() : nullptr,
+				all_sizes.data(),
+				displacements.data(),
+				MPI_INT,
+				0,
+				comm);
+
+	return full_clustering;
+}
+
+vector<int> MPI_computeClustering(const vector<vector<double>>& data,
+								  const vector<vector<double>>& centroids) {
+	int rank, size;
+	MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+	MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+	// Broadcast centroids to all processes.
+	vector<vector<double>> local_centroids = centroids;
+	broadcast_centroids(local_centroids, rank, 0, MPI_COMM_WORLD);
+
+	// Scatter data among processes.
+	vector<vector<double>> local_data = MPI_evenlyScatterData(data,
+															  MPI_COMM_WORLD);
+
+	// Each process computes its local clustering.
+	vector<int> local_clustering(local_data.size());
+	for(size_t i = 0; i < local_data.size(); ++i)
+		local_clustering[i] = closest_centroid(local_data[i], local_centroids);
+
+	// Gather the local clusterings to the master process.
+	return MPI_gatherUnbalancedData(local_clustering, MPI_COMM_WORLD);
 }
