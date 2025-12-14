@@ -4,14 +4,14 @@
 void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank, MPI_Comm mpi_comm) {
 	// Broadcast centroids to all processes.
 	vector<double> flat_centroids;
-	int rows, cols;
+	int dims[2];
+	int &rows = dims[0], &cols = dims[1];
 	if(rank==sender_rank){
 		flat_centroids = flatten(centroids);
 		rows = centroids.size();
 		cols = centroids[0].size();
 	}
-	MPI_Bcast(&rows, 1, MPI_INT, sender_rank, MPI_COMM_WORLD);
-    MPI_Bcast(&cols, 1, MPI_INT, sender_rank, MPI_COMM_WORLD);
+	MPI_Bcast(dims, 2, MPI_INT, sender_rank, MPI_COMM_WORLD);
 	if(rank!=sender_rank){
 		flat_centroids.resize(rows * cols);
 	}
@@ -47,7 +47,8 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 	MPI_Comm_rank(mpi_comm, &rank);
 	MPI_Comm_size(mpi_comm, &size);
 
-	int total_cols, per_process_rows, remainder;
+	int dims[3];
+	int &total_cols = dims[0], &per_process_rows = dims[1], &remainder = dims[2];
 	vector<double> flat_data;
 
 	MPI_master() {
@@ -55,7 +56,7 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 		total_cols = data[0].size();
 
 		// Calculate the number of rows per process.
-		per_process_rows = total_rows /size;
+		per_process_rows = total_rows / size;
 		remainder = total_rows % per_process_rows;
 
 		// Flatten the data.
@@ -63,9 +64,7 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 	}
 
 	// Send to all processes the data dimensions.
-	MPI_Bcast(&per_process_rows, 1, MPI_INT, 0, mpi_comm);
-	MPI_Bcast(&remainder, 1, MPI_INT, 0, mpi_comm);
-	MPI_Bcast(&total_cols, 1, MPI_INT, 0, mpi_comm);
+	MPI_Bcast(&dims, 3, MPI_INT, 0, mpi_comm);
 
 	// Buffer send and displacements.
 	// Note: the master process gets more rows beacause it's a fake comunication
