@@ -80,7 +80,12 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 		else{
 			filter(u->getLeft(), candidates, centroids, wgtCent, counts);
 			filter(u->getRight(), candidates, centroids, wgtCent, counts);
-			u->setCluster(closest_centroid(u->getPoint(), centroids)); //assign to closest centroid
+			c = closest_centroid(u->getPoint(), centroids);
+			u->setCluster(c); //assign to closest centroid
+			for(int i=0; i<wgtCent[c].size(); ++i){ // for each dimension sum the coordinate
+				wgtCent[c][i] += u->getPoint()[i];
+			}
+			counts[c] += 1;
 		}
 	}
 	return;
