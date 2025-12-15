@@ -27,3 +27,11 @@ add_executable(test_parallel_clustering ${SOURCES}
 
 target_include_directories(test_parallel_clustering PRIVATE include)
 target_link_libraries(test_parallel_clustering PRIVATE MPI::MPI_CXX)
+
+# Test KDTree
+add_executable(test_kdtree
+    src/KDTree.cpp        # Only KDTree implementation
+    test/test_kdtree.cpp  # test file
+)
+
+target_include_directories(test_kdtree PRIVATE include)
