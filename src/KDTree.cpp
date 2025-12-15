@@ -200,21 +200,20 @@ void KDTree::build(std::vector<std::vector<double>> points) {
     if (points.empty()) {
         root.reset();  // Clears the unique_ptr
         node_count = 0;
+        K = 0;
         return;
     }
     
     // Validate all points have correct dimension
     size_t dim = points[0].size();
-    if (dim == 0) {
-        throw std::invalid_argument("Points must have at least 1 dimension");
-    }
-    validatePoints(points, dim);
     
     // If K is set and doesn't match, throw error
     if (K > 0 && K != dim) {
         throw std::invalid_argument("Point dimension " + std::to_string(dim) + 
-                                  " doesn't match tree dimension " + std::to_string(K));
+        " doesn't match tree dimension " + std::to_string(K));
     }
+
+    validatePoints(points, dim);
     
     K = dim;
     root.reset();  // Clears the unique_ptr
@@ -223,33 +222,40 @@ void KDTree::build(std::vector<std::vector<double>> points) {
 }
 
 bool KDTree::insert(const std::vector<double>& point) {
-    // Validate point is not empty
     if (point.empty()) {
         throw std::invalid_argument("Cannot insert empty point");
     }
-    
-    // If tree is uninitialized, set dimension from first point
+
+    // Initialize dimension on first insertion
     if (K == 0) {
         K = point.size();
     }
-    
-    // Validate dimension matches
+
+    // Enforce dimensional consistency
     if (point.size() != K) {
-        throw std::invalid_argument("Point dimension " + std::to_string(point.size()) + 
-                                  " doesn't match tree dimension " + std::to_string(K));
+        throw std::invalid_argument(
+            "Point dimension " + std::to_string(point.size()) +
+            " doesn't match tree dimension " + std::to_string(K)
+        );
     }
-    
+
     return insertRecursive(root, point, 0, default_eps);
 }
 
 bool KDTree::search(const std::vector<double>& point) const {
     if (K == 0) {
-        throw std::invalid_argument("Cannot search in tree with uninitialized dimension");
+        throw std::logic_error(
+            "Cannot search in KDTree with uninitialized dimension"
+        );
     }
+
     if (point.size() != K) {
-        throw std::invalid_argument("Point dimension " + std::to_string(point.size()) + 
-                                  " doesn't match tree dimension " + std::to_string(K));
+        throw std::invalid_argument(
+            "Point dimension " + std::to_string(point.size()) +
+            " doesn't match tree dimension " + std::to_string(K)
+        );
     }
+
     return searchRecursive(root, point, 0, default_eps);
 }
 
