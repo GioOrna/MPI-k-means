@@ -68,16 +68,6 @@ private:
                         int depth,
                         double eps = default_eps);
     
-    // Recursively deletes a point from the tree
-    // Returns true if point was found and deleted, false otherwise
-    bool deleteRecursive(std::unique_ptr<Node>& node,
-                        const std::vector<double>& point,
-                        int depth,
-                        double eps = default_eps);
-    
-    // Helper for deleteRecursive: finds the minimum point in a given dimension
-    const Node* findMin(const std::unique_ptr<Node>& node, int dim, int depth) const;
-    
     // Recursively counts nodes in the tree
     size_t countNodes(const std::unique_ptr<Node>& node) const;
     
@@ -97,7 +87,7 @@ private:
 public:
     // Constructs an empty KD-tree (dimension inferred on first build/insert)
     KDTree();
-    
+
     // Constructs an empty KD-tree with specified dimensionality
     KDTree(size_t dimension);
     
@@ -124,10 +114,6 @@ public:
     // Returns true if inserted, false if already exists
     // Throws std::invalid_argument if point dimension doesn't match K
     bool insert(const std::vector<double>& point);
-    
-    // Deletes a point from the tree (O(log n) average, worst case O(n))
-    // Returns true if deleted, false if not found
-    bool deletePoint(const std::vector<double>& point);
     
     // Searches for a point in the KD-tree
     // Throws std::invalid_argument if point dimension doesn't match K

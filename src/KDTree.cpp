@@ -138,91 +138,6 @@ bool KDTree::insertRecursive(std::unique_ptr<Node>& node,
     return insertRecursive(node->right, point, depth + 1, eps);
 }
 
-const KDTree::Node* KDTree::findMin(const std::unique_ptr<Node>& node, 
-                                   int dim, int depth) const {
-    if (!node) return nullptr;
-
-    int cd = depth % K;
-    
-    // If we're at the discriminating dimension, min is in left subtree
-    if (cd == dim) {
-        if (!node->left) return node.get();
-        return findMin(node->left, dim, depth + 1);
-    }
-
-    // Otherwise, check all three nodes (current, left, right)
-    const Node* minNode = node.get();
-    
-    if (node->left) {
-        const Node* leftMin = findMin(node->left, dim, depth + 1);
-        if (leftMin && leftMin->getPoint()[dim] < minNode->getPoint()[dim]) {
-            minNode = leftMin;
-        }
-    }
-    
-    if (node->right) {
-        const Node* rightMin = findMin(node->right, dim, depth + 1);
-        if (rightMin && rightMin->getPoint()[dim] < minNode->getPoint()[dim]) {
-            minNode = rightMin;
-        }
-    }
-    
-    return minNode;
-}
-
-// Function not tested completely yet.
-// Right now, we need to improve, the use of getCluster. It is not used correctly, and 
-// it is inefficient, we are copying cluster data unnecessarily. But like delete is not used 
-// in our kmeans implementation, we can leave it for now and optimize later if needed.
-bool KDTree::deleteRecursive(std::unique_ptr<Node>& node,
-                            const std::vector<double>& point,
-                            int depth,
-                            double eps) {
-    if (!node) return false;
-
-    int cd = depth % K;
-
-    // Check if this is the point to delete
-    if (approxEqualPoint(node->point, point, eps)) {
-        // Case 1: Node has right child
-        if (node->right) {
-            const Node* minNode = findMin(node->right, cd, depth + 1);
-            node->point = minNode->getPoint();
-            node->cluster = minNode->getCluster();
-            return deleteRecursive(node->right, minNode->getPoint(), depth + 1, eps);
-        }
-        // Case 2: Node has only left child
-        else if (node->left) {
-            // Move left to right first
-            node->right = std::move(node->left);
-            const Node* minNode = findMin(node->right, cd, depth + 1);
-            node->point = minNode->getPoint();
-            node->cluster = minNode->getCluster();
-            return deleteRecursive(node->right, minNode->getPoint(), depth + 1, eps);
-        }
-        // Case 3: Node is a leaf
-        else {
-            node = nullptr;
-            node_count--;
-            return true;
-        }
-    }
-
-    // Recurse to find the point
-    if (approxEqual(point[cd], node->point[cd], eps)) {
-        // Could be in either subtree when coordinates are equal
-        bool found = deleteRecursive(node->left, point, depth + 1, eps);
-        if (!found) {
-            found = deleteRecursive(node->right, point, depth + 1, eps);
-        }
-        return found;
-    }
-    if (point[cd] < node->point[cd]) {
-        return deleteRecursive(node->left, point, depth + 1, eps);
-    }
-    return deleteRecursive(node->right, point, depth + 1, eps);
-}
-
 size_t KDTree::countNodes(const std::unique_ptr<Node>& node) const {
     if (!node) return 0;
     return 1 + countNodes(node->left) + countNodes(node->right);
@@ -325,17 +240,6 @@ bool KDTree::insert(const std::vector<double>& point) {
     }
     
     return insertRecursive(root, point, 0, default_eps);
-}
-
-bool KDTree::deletePoint(const std::vector<double>& point) {
-    if (K == 0) {
-        throw std::invalid_argument("Cannot delete from tree with uninitialized dimension");
-    }
-    if (point.size() != K) {
-        throw std::invalid_argument("Point dimension " + std::to_string(point.size()) + 
-                                  " doesn't match tree dimension " + std::to_string(K));
-    }
-    return deleteRecursive(root, point, 0, default_eps);
 }
 
 bool KDTree::search(const std::vector<double>& point) const {
