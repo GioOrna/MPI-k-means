@@ -4,6 +4,7 @@
 bool approxEqualPoint(const std::vector<double>& a,
                       const std::vector<double>& b,
                       double eps) {
+    if (a.size() != b.size()) return false;
     for (size_t i = 0; i < a.size(); ++i)
         if (!approxEqual(a[i], b[i], eps))
             return false;
@@ -20,14 +21,44 @@ const KDTree::Node* KDTree::Node::getLeft() const { return left.get(); }
 const KDTree::Node* KDTree::Node::getRight() const { return right.get(); }
 void KDTree::Node::setCluster(int c) const { cluster = c; }
 
+// ---- Validation ----
+
+void KDTree::validatePoints(const std::vector<std::vector<double>>& points, 
+                            size_t expectedDim) const {
+    if (points.empty()) {
+        throw std::invalid_argument("Cannot build tree with empty point set");
+    }
+    for (size_t i = 0; i < points.size(); ++i) {
+        if (points[i].size() != expectedDim) {
+            throw std::invalid_argument("Point at index " + std::to_string(i) + 
+                                      " has dimension " + std::to_string(points[i].size()) + 
+                                      ", expected " + std::to_string(expectedDim));
+        }
+    }
+}
+
 // ---- KDTree methods ----
 
-KDTree::KDTree(size_t dimension) : root(nullptr), K(dimension) {}
+KDTree::KDTree() 
+    : root(nullptr), K(0), node_count(0) {}
 
-KDTree::KDTree(std::vector<std::vector<double>> points) : root(nullptr) {
+KDTree::KDTree(size_t dimension) 
+    : root(nullptr), K(dimension), node_count(0) {
+    if (dimension == 0) {
+        throw std::invalid_argument("Dimension K must be at least 1");
+    }
+}
+
+KDTree::KDTree(std::vector<std::vector<double>> points) 
+    : root(nullptr), K(0), node_count(0) {
     if (!points.empty()) {
         K = points[0].size();
+        if (K == 0) {
+            throw std::invalid_argument("Points must have at least 1 dimension");
+        }
+        validatePoints(points, K);
         root = buildTree(points, 0, points.size(), 0);
+        node_count = countNodes(root);
     }
 }
 
@@ -67,8 +98,10 @@ bool KDTree::searchRecursive(const std::unique_ptr<Node>& node,
     // Check if points are equal within tolerance
     if (approxEqualPoint(node->point, point, eps))
         return true;
+    
     // Calculate current dimension (cycles through 0 to K-1)
     int cd = depth % K;
+    
     // Recurse down the appropriate subtree based on current dimension
     if (approxEqual(point[cd], node->point[cd], eps)) {
         return searchRecursive(node->left, point, depth + 1, eps) ||
@@ -80,9 +113,118 @@ bool KDTree::searchRecursive(const std::unique_ptr<Node>& node,
     return searchRecursive(node->right, point, depth + 1, eps);
 }
 
+bool KDTree::insertRecursive(std::unique_ptr<Node>& node,
+                            const std::vector<double>& point,
+                            int depth,
+                            double eps) {
+    // Base case: empty space, insert here
+    if (!node) {
+        node = std::make_unique<Node>(point);
+        node_count++;
+        return true;
+    }
+
+    // Check if point already exists
+    if (approxEqualPoint(node->point, point, eps)) {
+        return false;  // Point already exists
+    }
+
+    int cd = depth % K;
+
+    // Decide which subtree to traverse
+    if (point[cd] < node->point[cd]) {
+        return insertRecursive(node->left, point, depth + 1, eps);
+    }
+    return insertRecursive(node->right, point, depth + 1, eps);
+}
+
+const KDTree::Node* KDTree::findMin(const std::unique_ptr<Node>& node, 
+                                   int dim, int depth) const {
+    if (!node) return nullptr;
+
+    int cd = depth % K;
+    
+    // If we're at the discriminating dimension, min is in left subtree
+    if (cd == dim) {
+        if (!node->left) return node.get();
+        return findMin(node->left, dim, depth + 1);
+    }
+
+    // Otherwise, check all three nodes (current, left, right)
+    const Node* minNode = node.get();
+    
+    if (node->left) {
+        const Node* leftMin = findMin(node->left, dim, depth + 1);
+        if (leftMin && leftMin->getPoint()[dim] < minNode->getPoint()[dim]) {
+            minNode = leftMin;
+        }
+    }
+    
+    if (node->right) {
+        const Node* rightMin = findMin(node->right, dim, depth + 1);
+        if (rightMin && rightMin->getPoint()[dim] < minNode->getPoint()[dim]) {
+            minNode = rightMin;
+        }
+    }
+    
+    return minNode;
+}
+
+bool KDTree::deleteRecursive(std::unique_ptr<Node>& node,
+                            const std::vector<double>& point,
+                            int depth,
+                            double eps) {
+    if (!node) return false;
+
+    int cd = depth % K;
+
+    // Check if this is the point to delete
+    if (approxEqualPoint(node->point, point, eps)) {
+        // Case 1: Node has right child, replace with successor from right subtree
+        if (node->right) {
+            const Node* minNode = findMin(node->right, cd, depth + 1);
+            node->point = minNode->getPoint();
+            node->cluster = minNode->getCluster();
+            deleteRecursive(node->right, minNode->getPoint(), depth + 1, eps);
+        }
+        // Case 2: Node has only left child
+        else if (node->left) {
+            const Node* minNode = findMin(node->left, cd, depth + 1);
+            node->point = minNode->getPoint();
+            node->cluster = minNode->getCluster();
+            deleteRecursive(node->left, minNode->getPoint(), depth + 1, eps);
+        }
+        // Case 3: Node is a leaf
+        else {
+            node = nullptr;
+        }
+        node_count--;
+        return true;
+    }
+
+    // Recurse to find the point
+    if (point[cd] < node->point[cd]) {
+        return deleteRecursive(node->left, point, depth + 1, eps);
+    }
+    return deleteRecursive(node->right, point, depth + 1, eps);
+}
+
+size_t KDTree::countNodes(const std::unique_ptr<Node>& node) const {
+    if (!node) return 0;
+    return 1 + countNodes(node->left) + countNodes(node->right);
+}
+
+int KDTree::getHeight(const std::unique_ptr<Node>& node) const {
+    if (!node) return -1;
+    int leftHeight = getHeight(node->left);
+    int rightHeight = getHeight(node->right);
+    return 1 + std::max(leftHeight, rightHeight);
+}
+
 void KDTree::printRecursive(const std::unique_ptr<Node>& node, int depth) const {
     // Base case: null node, nothing to print
     if (node == nullptr) return;
+    
     // Print indentation based on depth
     for (int i = 0; i < depth; ++i) {
         std::cout << "  ";
@@ -126,29 +268,78 @@ void KDTree::writeCSVRecursive(const std::unique_ptr<Node>& node,
 }
 
 void KDTree::build(std::vector<std::vector<double>> points) {
-    root.reset();  // Clears the unique_ptr
-    // Build new tree
-    if (!points.empty()) {
-        K = points[0].size();
-        root = buildTree(points, 0, points.size(), 0);
+    if (points.empty()) {
+        root.reset();  // Clears the unique_ptr
+        node_count = 0;
+        return;
     }
+    
+    // Validate all points have correct dimension
+    size_t dim = points[0].size();
+    if (dim == 0) {
+        throw std::invalid_argument("Points must have at least 1 dimension");
+    }
+    validatePoints(points, dim);
+    
+    // If K is set and doesn't match, throw error
+    if (K > 0 && K != dim) {
+        throw std::invalid_argument("Point dimension " + std::to_string(dim) + 
+                                  " doesn't match tree dimension " + std::to_string(K));
+    }
+    
+    K = dim;
+    root.reset();  // Clears the unique_ptr
+    root = buildTree(points, 0, points.size(), 0);
+    node_count = countNodes(root);
 }
 
-void KDTree::insert(const std::vector<double>& point) {
-    // Collect all existing points
-    std::vector<std::vector<double>> points;
-    collectPoints(root, points);
-    // Add new point
-    points.push_back(point);
-    // Rebuild tree
-    build(points);
+bool KDTree::insert(const std::vector<double>& point) {
+    // Validate point is not empty
+    if (point.empty()) {
+        throw std::invalid_argument("Cannot insert empty point");
+    }
+    
+    // If tree is uninitialized, set dimension from first point
+    if (K == 0) {
+        K = point.size();
+    }
+    
+    // Validate dimension matches
+    if (point.size() != K) {
+        throw std::invalid_argument("Point dimension " + std::to_string(point.size()) + 
+                                  " doesn't match tree dimension " + std::to_string(K));
+    }
+    
+    return insertRecursive(root, point, 0, default_eps);
+}
+
+bool KDTree::deletePoint(const std::vector<double>& point) {
+    if (K == 0) {
+        throw std::invalid_argument("Cannot delete from tree with uninitialized dimension");
+    }
+    if (point.size() != K) {
+        throw std::invalid_argument("Point dimension " + std::to_string(point.size()) + 
+                                  " doesn't match tree dimension " + std::to_string(K));
+    }
+    return deleteRecursive(root, point, 0, default_eps);
 }
 
 bool KDTree::search(const std::vector<double>& point) const {
+    if (K == 0) {
+        throw std::invalid_argument("Cannot search in tree with uninitialized dimension");
+    }
+    if (point.size() != K) {
+        throw std::invalid_argument("Point dimension " + std::to_string(point.size()) + 
+                                  " doesn't match tree dimension " + std::to_string(K));
+    }
     return searchRecursive(root, point, 0, default_eps);
 }
 
 void KDTree::print() const {
+    if (empty()) {
+        std::cout << "Empty tree\n";
+        return;
+    }
     printRecursive(root, 0);
 }
 
@@ -156,16 +347,28 @@ bool KDTree::empty() const {
     return root == nullptr;
 }
 
+size_t KDTree::size() const {
+    return node_count;
+}
+
+int KDTree::height() const {
+    return getHeight(root);
+}
+
 const KDTree::Node* KDTree::getRoot() const {
     return root.get();
 }
 
 KDTree::Node* KDTree::appendNode(const std::vector<double>& point) {
+    if (!root) {
+        throw std::runtime_error("Cannot append to empty tree");
+    }
     Node* parsing_node = root.get();
     while (parsing_node->right != nullptr) {
         parsing_node = parsing_node->right.get();
     }
-    parsing_node->right = std::make_unique<Node>(point); //just to test the output file
+    parsing_node->right = std::make_unique<Node>(point);  // just to test the output file
+    node_count++;
     return parsing_node->right.get();
 }
 
