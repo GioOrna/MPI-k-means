@@ -170,6 +170,10 @@ const KDTree::Node* KDTree::findMin(const std::unique_ptr<Node>& node,
     return minNode;
 }
 
+// Function not tested completely yet.
+// Right now, we need to improve, the use of getCluster. It is not used correctly, and 
+// it is inefficient, we are copying cluster data unnecessarily. But like delete is not used 
+// in our kmeans implementation, we can leave it for now and optimize later if needed.
 bool KDTree::deleteRecursive(std::unique_ptr<Node>& node,
                             const std::vector<double>& point,
                             int depth,
@@ -180,29 +184,39 @@ bool KDTree::deleteRecursive(std::unique_ptr<Node>& node,
 
     // Check if this is the point to delete
     if (approxEqualPoint(node->point, point, eps)) {
-        // Case 1: Node has right child, replace with successor from right subtree
+        // Case 1: Node has right child
         if (node->right) {
             const Node* minNode = findMin(node->right, cd, depth + 1);
             node->point = minNode->getPoint();
             node->cluster = minNode->getCluster();
-            deleteRecursive(node->right, minNode->getPoint(), depth + 1, eps);
+            return deleteRecursive(node->right, minNode->getPoint(), depth + 1, eps);
         }
         // Case 2: Node has only left child
         else if (node->left) {
-            const Node* minNode = findMin(node->left, cd, depth + 1);
+            // Move left to right first
+            node->right = std::move(node->left);
+            const Node* minNode = findMin(node->right, cd, depth + 1);
             node->point = minNode->getPoint();
             node->cluster = minNode->getCluster();
-            deleteRecursive(node->left, minNode->getPoint(), depth + 1, eps);
+            return deleteRecursive(node->right, minNode->getPoint(), depth + 1, eps);
         }
         // Case 3: Node is a leaf
         else {
             node = nullptr;
+            node_count--;
+            return true;
         }
-        node_count--;
-        return true;
     }
 
     // Recurse to find the point
+    if (approxEqual(point[cd], node->point[cd], eps)) {
+        // Could be in either subtree when coordinates are equal
+        bool found = deleteRecursive(node->left, point, depth + 1, eps);
+        if (!found) {
+            found = deleteRecursive(node->right, point, depth + 1, eps);
+        }
+        return found;
+    }
     if (point[cd] < node->point[cd]) {
         return deleteRecursive(node->left, point, depth + 1, eps);
     }
