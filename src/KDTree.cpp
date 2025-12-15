@@ -16,8 +16,8 @@ KDTree::Node::Node(const std::vector<double>& pt)
     : point(pt), left(nullptr), right(nullptr), cluster(-1) {}
 
 std::vector<double> KDTree::Node::getPoint() const { return point; }
-const KDTree::Node* KDTree::Node::getLeft() const { return left; }
-const KDTree::Node* KDTree::Node::getRight() const { return right; }
+const KDTree::Node* KDTree::Node::getLeft() const { return left.get(); }
+const KDTree::Node* KDTree::Node::getRight() const { return right.get(); }
 void KDTree::Node::setCluster(int c) const { cluster = c; }
 
 // ---- KDTree methods ----
@@ -31,16 +31,10 @@ KDTree::KDTree(std::vector<std::vector<double>> points) : root(nullptr) {
     }
 }
 
-KDTree::~KDTree() {
-    deleteRecursive(root);
-}
-
-KDTree::Node* KDTree::buildTree(std::vector<std::vector<double>>& points,
-                                int start, int end, int depth) {
+std::unique_ptr<KDTree::Node> KDTree::buildTree(std::vector<std::vector<double>>& points,
+                                                 int start, int end, int depth) {
     // Base case: no points to process
-    if (start >= end){
-        return nullptr;
-    }
+    if (start >= end) return nullptr;
 
     // Calculate current dimension (cycles through 0 to K-1)
     int cd = depth % K;
@@ -57,19 +51,19 @@ KDTree::Node* KDTree::buildTree(std::vector<std::vector<double>>& points,
                      });
 
     // Create node with median point
-    Node* node = new Node(points[mid]);
+    auto node = std::make_unique<Node>(points[mid]);
     // Recursively build left and right subtrees
     node->left = buildTree(points, start, mid, depth + 1);
     node->right = buildTree(points, mid + 1, end, depth + 1);
     return node;
 }
 
-bool KDTree::searchRecursive(Node* node, const std::vector<double>& point,
-                             int depth, double eps = 1e-9) const {
+bool KDTree::searchRecursive(const std::unique_ptr<Node>& node, 
+                             const std::vector<double>& point,
+                             int depth, double eps) const {
     // Base case: reached a leaf (point not found)
-    if (node == nullptr){
-        return false;
-    }
+    if (node == nullptr) return false;
+
     // Check if points are equal within tolerance
     if (approxEqualPoint(node->point, point, eps))
         return true;
@@ -80,19 +74,17 @@ bool KDTree::searchRecursive(Node* node, const std::vector<double>& point,
         return searchRecursive(node->left, point, depth + 1, eps) ||
                searchRecursive(node->right, point, depth + 1, eps);
     }
-    if (point[cd] < node->point[cd]){
+    if (point[cd] < node->point[cd]) {
         return searchRecursive(node->left, point, depth + 1, eps);
     }
     return searchRecursive(node->right, point, depth + 1, eps);
 }
 
-void KDTree::printRecursive(Node* node, int depth) const {
+void KDTree::printRecursive(const std::unique_ptr<Node>& node, int depth) const {
     // Base case: null node, nothing to print
-    if (node == nullptr) {
-        return;
-    }
+    if (node == nullptr) return;
     // Print indentation based on depth
-    for (int i = 0; i < depth; ++i){
+    for (int i = 0; i < depth; ++i) {
         std::cout << "  ";
     }
     // Print the point coordinates with the splitting dimension
@@ -109,22 +101,16 @@ void KDTree::printRecursive(Node* node, int depth) const {
     printRecursive(node->right, depth + 1);
 }
 
-void KDTree::deleteRecursive(Node* node) {
-    if (node == nullptr) return;    
-    // Post-order traversal: delete children first
-    deleteRecursive(node->left);
-    deleteRecursive(node->right);
-    delete node;
-}
-
-void KDTree::collectPoints(Node* node, std::vector<std::vector<double>>& points) const {
+void KDTree::collectPoints(const std::unique_ptr<Node>& node, 
+                           std::vector<std::vector<double>>& points) const {
     if (node == nullptr) return;
     points.push_back(node->point);
     collectPoints(node->left, points);
     collectPoints(node->right, points);
 }
 
-void KDTree::writeCSVRecursive(Node* node, std::ofstream& out) const {
+void KDTree::writeCSVRecursive(const std::unique_ptr<Node>& node, 
+                               std::ofstream& out) const {
     if (!node) return;
     // Write point coordinates
     for (size_t i = 0; i < node->point.size(); ++i) {
@@ -140,9 +126,7 @@ void KDTree::writeCSVRecursive(Node* node, std::ofstream& out) const {
 }
 
 void KDTree::build(std::vector<std::vector<double>> points) {
-    // Delete existing tree
-    deleteRecursive(root);
-    root = nullptr;
+    root.reset();  // Clears the unique_ptr
     // Build new tree
     if (!points.empty()) {
         K = points[0].size();
@@ -161,7 +145,7 @@ void KDTree::insert(const std::vector<double>& point) {
 }
 
 bool KDTree::search(const std::vector<double>& point) const {
-    return searchRecursive(root, point, 0);
+    return searchRecursive(root, point, 0, default_eps);
 }
 
 void KDTree::print() const {
@@ -172,17 +156,17 @@ bool KDTree::empty() const {
     return root == nullptr;
 }
 
-const KDTree::Node* KDTree::getRoot() {
-    return root;
+const KDTree::Node* KDTree::getRoot() const {
+    return root.get();
 }
 
-const KDTree::Node* KDTree::appendNode(const std::vector<double>& point) {
-    Node* parsing_node = root;
-    while(parsing_node->right != nullptr){
-		parsing_node = parsing_node->right;
-	}
-    parsing_node->right = new KDTree::Node(point); //just to test the output file
-    return parsing_node->right;
+KDTree::Node* KDTree::appendNode(const std::vector<double>& point) {
+    Node* parsing_node = root.get();
+    while (parsing_node->right != nullptr) {
+        parsing_node = parsing_node->right.get();
+    }
+    parsing_node->right = std::make_unique<Node>(point); //just to test the output file
+    return parsing_node->right.get();
 }
 
 void KDTree::writeCSV(const std::string& filename) const {
