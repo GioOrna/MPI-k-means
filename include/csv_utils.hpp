@@ -5,6 +5,13 @@
 #include <vector>
 #include <array>
 
+/**
+ * @brief Write a CSV file of the clustered data and a CSV file of the centroids.
+ * @param input_file The initial part of the name we want to use.
+ * @param clustering The clustering of the data.
+ * @param data The data we want to write.
+ * @param centroids The centroids we want to write.
+ */
 void writeCSV(std::string input_file, std::vector<int> clustering, std::vector<std::vector<double>> data, std::vector<std::vector<double>> centroids);
 
 /**

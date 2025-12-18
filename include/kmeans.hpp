@@ -67,10 +67,17 @@ double distance(vector<double> a, vector<double> b);
 /**
  * @brief Sequential K-means algorithm, will update centroids with the new calculated centroids
  * @param centroids Centroids we want to update.
- * @param node The root of the tree we want to use. 
+ * @param data_to_work The data to work on. 
  */
 void kmeans_sequential(vector<vector<double>>& centroids,
 			std::vector<std::vector<double>> data_to_work);
 
+/**
+ * @brief Parallel K-means algorithm, will update centroids with the new calculated centroids
+ * @param rank Rank of the process entering the function.
+ * @param size Total number of processes entering the function.
+ * @param centroids Centroids we want to update.
+ * @param data_to_work The data to work on. 
+ */
 vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>>& centroids,
 			std::vector<std::vector<double>> data_to_work);

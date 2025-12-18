@@ -81,7 +81,16 @@ public:
          */
         const Node* getRight() const;
 
+        /**
+         * @brief Get the sum of coordinates of the subtree that has this node has root.
+         * @return The sum of coordinate.
+         */
         std::vector<double> getSum() const;
+
+        /**
+         * @brief Get the number of nodes in the subtree that has this node has root.
+         * @return The number of nodes.
+         */
         int getCount() const;
     };
 
@@ -259,6 +268,10 @@ public:
      */
     Node* appendNode(const std::vector<double>& point);
 
+    /**
+     * @brief Calculates the sums of coordinates and number of points of the subtree having the node specified as root.
+     * @param node Pointer to the node we want to use has root.
+     */
     void assignMidpointData(std::unique_ptr<KDTree::Node>& node);
 };
 

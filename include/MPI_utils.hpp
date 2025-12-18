@@ -85,8 +85,28 @@ vector<vector<double>> unflatten(const vector<double>& flat, int rows, int cols)
 void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank);
 #endif // MPI_UTILS_HPP
 
+/**
+ * @brief Gather all results in the wgtCent and counts of the specified rank.
+ * @param wgtCent Vector containing partial result for the sum of coordinates per cluster.
+ * @param counts Vector of partial number of nodes per cluster.
+ * @param to_rank Rank that should get the final sum of coordinates and counts.
+ * @param rank Rank of the current process.
+ * @param size Total number of processes.
+ */
 void gather_results(vector<vector<double>>& wgtCent, vector<int>& counts, int to_rank, int rank, int size);
 
+/**
+ * @brief Sends the sum of coordinates and number of points to process with specified rank.
+ * @param wgtCent Vector containing sum of coordinates per cluster.
+ * @param counts Vector of number of points per cluster.
+ * @param to_rank Rank of the process to send the data to.
+ */
 void send_result(vector<vector<double>>& wgtCent, vector<int> counts, int to_rank);
 
+/**
+ * @brief Receive the sum of coordinates and number of points from process wih specified rank.
+ * @param wgtCent Vector where to store the sum of coordinates per cluster.
+ * @param counts Vector where to store the number of nodes per cluster.
+ * @param sender_rank Rank of the sender process.
+ */
 void receive_result(vector<vector<double>>& wgtCent, vector<int>& counts, int sender_rank);
