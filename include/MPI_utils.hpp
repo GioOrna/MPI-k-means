@@ -82,5 +82,11 @@ vector<vector<double>> unflatten(const vector<double>& flat, int rows, int cols)
  * @param mpi_comm The MPI communicator.
  * @return void
  */
-void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank, MPI_Comm mpi_comm);
+void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank);
 #endif // MPI_UTILS_HPP
+
+void gather_results(vector<vector<double>>& wgtCent, vector<int>& counts, int to_rank, int rank, int size);
+
+void send_result(vector<vector<double>>& wgtCent, vector<int> counts, int to_rank);
+
+void receive_result(vector<vector<double>>& wgtCent, vector<int>& counts, int sender_rank);

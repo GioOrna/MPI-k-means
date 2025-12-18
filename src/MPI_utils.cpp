@@ -1,23 +1,83 @@
 #include "../include/MPI_utils.hpp"
 #include "../include/kmeans.hpp"
 
-void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank, MPI_Comm mpi_comm) {
+void broadcast_centroids(vector<vector<double>>& centroids, int rank, int sender_rank) {
 	// Broadcast centroids to all processes.
 	vector<double> flat_centroids;
-	int dims[2];
-	int &rows = dims[0], &cols = dims[1];
+	int rows, cols;
 	if(rank==sender_rank){
 		flat_centroids = flatten(centroids);
 		rows = centroids.size();
 		cols = centroids[0].size();
 	}
-	MPI_Bcast(dims, 2, MPI_INT, sender_rank, MPI_COMM_WORLD);
+	MPI_Bcast(&rows, 1, MPI_INT, sender_rank, MPI_COMM_WORLD);
+    MPI_Bcast(&cols, 1, MPI_INT, sender_rank, MPI_COMM_WORLD);
 	if(rank!=sender_rank){
 		flat_centroids.resize(rows * cols);
 	}
     MPI_Bcast(flat_centroids.data(), flat_centroids.size(), MPI_DOUBLE, sender_rank, MPI_COMM_WORLD);
 	centroids = unflatten(flat_centroids, rows, cols);
 	return;
+}
+
+void gather_results(vector<vector<double>>& wgtCent, vector<int>& counts, int to_rank, int rank, int size){
+	if(rank == to_rank){
+		for(int i=0;i<size;i++){
+			if(i!=rank){
+				vector<vector<double>> wgtCent2;
+				vector<int> counts2;
+				receive_result(wgtCent2, counts2, i);
+				for(int i=0;i<wgtCent.size();i++){
+                    for(int j=0;j<wgtCent[i].size();j++){
+                        wgtCent[i][j] = wgtCent[i][j]+wgtCent2[i][j];
+                    }
+                    counts[i] = counts[i] + counts2[i];
+                }
+			}
+		}
+	}else{
+		send_result(wgtCent, counts, to_rank);
+	}
+}
+
+void send_result(vector<vector<double>>& wgtCent, vector<int> counts, int to_rank){
+    if(wgtCent.empty() || wgtCent[0].empty()){
+        int rows = 0 ;
+        int cols = 0;
+        MPI_Send(&rows, 1, MPI_INT, to_rank, 0, MPI_COMM_WORLD);
+        MPI_Send(&cols, 1, MPI_INT, to_rank, 0, MPI_COMM_WORLD);
+        return;
+    }
+    vector<double> flat_wgtCent = flatten(wgtCent);
+    int rows = wgtCent.size();
+    int cols = wgtCent[0].size();
+    int num = counts.size();
+    MPI_Send(&rows, 1, MPI_INT, to_rank, 0, MPI_COMM_WORLD);
+    MPI_Send(&cols, 1, MPI_INT, to_rank, 0, MPI_COMM_WORLD);
+    MPI_Send(flat_wgtCent.data(), flat_wgtCent.size(), MPI_DOUBLE, to_rank, 0, MPI_COMM_WORLD);
+    MPI_Send(&num, 1, MPI_INT, to_rank, 0, MPI_COMM_WORLD);
+    MPI_Send(counts.data(), counts.size(), MPI_INT, to_rank, 0, MPI_COMM_WORLD);
+}
+
+void receive_result(vector<vector<double>>& wgtCent, vector<int>& counts, int sender_rank){
+    vector<double> flat_wgtCent;
+    int rows;
+    int cols;
+    int num;
+    MPI_Recv(&rows, 1, MPI_INT, sender_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cols, 1, MPI_INT, sender_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    if(rows <= 0 || cols <= 0){
+        wgtCent.clear();
+        counts.clear();
+        return;
+    }
+    flat_wgtCent.resize(rows*cols);
+    MPI_Recv(flat_wgtCent.data(), rows*cols, MPI_DOUBLE, sender_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&num, 1, MPI_INT, sender_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    counts.resize(num);
+    MPI_Recv(counts.data(), num, MPI_INT, sender_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    wgtCent = unflatten(flat_wgtCent, rows, cols);
+    return;
 }
 
 // Flatten a 2D vector into a 1D vector
@@ -47,8 +107,7 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 	MPI_Comm_rank(mpi_comm, &rank);
 	MPI_Comm_size(mpi_comm, &size);
 
-	int dims[3];
-	int &total_cols = dims[0], &per_process_rows = dims[1], &remainder = dims[2];
+	int total_cols, per_process_rows, remainder;
 	vector<double> flat_data;
 
 	MPI_master() {
@@ -56,7 +115,7 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 		total_cols = data[0].size();
 
 		// Calculate the number of rows per process.
-		per_process_rows = total_rows / size;
+		per_process_rows = total_rows /size;
 		remainder = total_rows % per_process_rows;
 
 		// Flatten the data.
@@ -64,7 +123,9 @@ vector<vector<double>> MPI_evenlyScatterData(const vector<vector<double>>& data,
 	}
 
 	// Send to all processes the data dimensions.
-	MPI_Bcast(&dims, 3, MPI_INT, 0, mpi_comm);
+	MPI_Bcast(&per_process_rows, 1, MPI_INT, 0, mpi_comm);
+	MPI_Bcast(&remainder, 1, MPI_INT, 0, mpi_comm);
+	MPI_Bcast(&total_cols, 1, MPI_INT, 0, mpi_comm);
 
 	// Buffer send and displacements.
 	// Note: the master process gets more rows beacause it's a fake comunication
@@ -151,7 +212,7 @@ vector<int> MPI_computeClustering(const vector<vector<double>>& data,
 
 	// Broadcast centroids to all processes.
 	vector<vector<double>> local_centroids = centroids;
-	broadcast_centroids(local_centroids, rank, 0, MPI_COMM_WORLD);
+	broadcast_centroids(local_centroids, rank, 0);
 
 	// Scatter data among processes.
 	vector<vector<double>> local_data = MPI_evenlyScatterData(data,
