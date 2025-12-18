@@ -5,6 +5,8 @@
 #include <vector>
 #include <array>
 
+void writeCSV(std::string input_file, std::vector<int> clustering, std::vector<std::vector<double>> data, std::vector<std::vector<double>> centroids);
+
 /**
  * @brief Reads a CSV file and returns its contents as a 2D vector of doubles.
  * @param filename The path to the CSV file.
