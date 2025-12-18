@@ -1,7 +1,54 @@
 #include "../include/kmeans.hpp"
+#include "../include/MPI_utils.hpp"
 
-void Kmeans_sequential(vector<vector<double>>& centroids,
-			const KDTree::Node* node){
+vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>>& centroids,
+			std::vector<std::vector<double>> data_to_work){
+	KDTree tree(data_to_work);
+	const KDTree::Node* node = tree.getRoot();
+	bool stabilized = false;
+	vector<vector<double>> old_centroids = centroids;
+	broadcast_centroids(centroids, rank, 0); // Broadcast centroids to all processes.
+	if(centroids.empty()){
+		return old_centroids;
+	}
+	while(!stabilized){
+		if(rank==0){
+			stabilized = true;
+		}
+		vector<int> candidates(centroids.size());
+		vector<vector<double>> wgtCent(centroids.size(), vector<double>(node->getPoint().size(), 0.0));
+        vector<int> counts(centroids.size(), 0);
+		filter(node, candidates, centroids, wgtCent, counts);
+		gather_results(wgtCent, counts, 0, rank, size); //now rank0 has the sum
+		if(rank==0){
+			for(int i=0; i<centroids.size(); ++i){
+				if(counts[i]>0){
+					for(int j=0; j<centroids[i].size(); ++j){
+						centroids[i][j] = wgtCent[i][j] / counts[i];
+						if(abs(centroids[i][j] - old_centroids[i][j]) > 1e-9){ // check for convergence
+							stabilized = false;
+							break;
+						}
+					}
+				}
+			}
+			old_centroids = centroids;	
+			if(stabilized == true){
+				centroids.clear();
+			}
+		}
+		broadcast_centroids(centroids, rank, 0); // Broadcast centroids to all processes.
+		if(centroids.empty()){
+			return old_centroids;
+		}
+	}
+	return old_centroids;
+}
+
+void kmeans_sequential(vector<vector<double>>& centroids,
+			std::vector<std::vector<double>> data_to_work){
+	KDTree tree(data_to_work);
+	const KDTree::Node* node = tree.getRoot();
 	vector<int> candidates;
 		candidates.resize(centroids.size());
 		vector<vector<double>> wgtCent;
@@ -42,13 +89,6 @@ void Kmeans_sequential(vector<vector<double>>& centroids,
 		}
 }
 
-void insert_centroid_in_tree(KDTree& tree, vector<vector<double>>& centroids){
-	for(int i=0; i<centroids.size(); i++){
-		const KDTree::Node* node = tree.appendNode(centroids[i]);
-		node->setCluster(centroids[i].size()+1+i);
-	}
-}
-
 void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>>& centroids, 
 		    vector<vector<double>>& wgtCent, vector<int>& counts){
 	if(u == nullptr){
@@ -56,16 +96,19 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 	}
 	if(u->getLeft() == nullptr && u->getRight() == nullptr){
 		int c = closest_centroid(u->getPoint(), centroids);
-		candidates.clear();
-		candidates.push_back(c);
 		for(int i=0; i<wgtCent[c].size(); ++i){ // for each dimension sum the coordinate
 			wgtCent[c][i] += u->getPoint()[i];
 		}
 		counts[c] += 1;
-		assign_to_cluster(u, c);
+		candidates.clear();
+		candidates.push_back(c);
 		return;
 	}else{
-		int c = closest_centroid(midpoint(u), centroids);
+		vector<double> midpoint = u->getSum();
+		for(int i=0; i<midpoint.size(); i++){
+			midpoint[i]/u->getCount();
+		}
+		int c = closest_centroid(midpoint, centroids);
 		for(int i = candidates.size() - 1; i >= 0; --i){
     		if(c != candidates[i] && is_farther(u, centroids, candidates[i], c)){
         		candidates.erase(candidates.begin() + i);
@@ -73,15 +116,14 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 		}
 
 		if(candidates.size()==1){
-			assign_subtree_to_cluster(wgtCent[c], counts[c], u); //sum coordinates and update counts
-			assign_to_cluster(u, c);
+			wgtCent[c] = u->getSum();
+			counts[c] = u->getCount();
 			return;
 		}
 		else{
 			filter(u->getLeft(), candidates, centroids, wgtCent, counts);
 			filter(u->getRight(), candidates, centroids, wgtCent, counts);
 			c = closest_centroid(u->getPoint(), centroids);
-			u->setCluster(c); //assign to closest centroid
 			for(int i=0; i<wgtCent[c].size(); ++i){ // for each dimension sum the coordinate
 				wgtCent[c][i] += u->getPoint()[i];
 			}
@@ -90,50 +132,6 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 	}
 	return;
 }
-
-void assign_subtree_to_cluster(vector<double>& wgtCent, int& counts, const KDTree::Node* node){
-	for(int i=0; i<wgtCent.size(); i++){
-		wgtCent[i] += node->getPoint()[i];
-	}
-	counts++;
-	if(node->getLeft() != nullptr){
-		assign_subtree_to_cluster(wgtCent, counts, node->getLeft());
-	}
-	if(node->getRight() != nullptr){
-		assign_subtree_to_cluster(wgtCent, counts, node->getRight());
-	}	
-	return;
-}
-
-
-void midpoint_sum(const KDTree::Node* node, vector<double>& sum, int& count){
-    if (node==nullptr){
-		return;
-	}
-	for (size_t i = 0; i < sum.size(); i++){
-		sum[i] += node->getPoint()[i];
-	}
-    count += 1;
-
-    if (node->getLeft()) { // if left child exists
-        midpoint_sum(node->getLeft(), sum, count);
-    }
-    if (node->getRight()) { // if right child exists
-        midpoint_sum(node->getRight(), sum, count);
-    }
-    return;
-}
-
-vector<double> midpoint(const KDTree::Node* node) {
-	vector<double> sum(node->getPoint().size(), 0.0);
-	int count = 0;
-	midpoint_sum(node, sum, count);
-    for(int i=0;i<sum.size();++i){
-		sum[i] /= count;
-	}
-    return sum;
-}
-
 
 //recursive function to check if all points in the subtree are closer to centroid c1 than c2
 bool is_farther(const KDTree::Node* node,
@@ -160,16 +158,6 @@ double distance(vector<double> a, vector<double> b){
 		dist += (a[j] - b[j]) * (a[j] - b[j]); //sum (over all dimensions) of distance squared
 	}
 	return dist;
-}
-
-void assign_to_cluster(const KDTree::Node* node, const int cluster){
-		node->setCluster(cluster); //add cluster info to point
-		if(node->getLeft() != nullptr){
-			assign_to_cluster(node->getLeft(), cluster);
-		}
-		if(node->getRight() != nullptr){
-			assign_to_cluster(node->getRight(), cluster);
-		}	
 }
 
 int closest_centroid(const vector<double>& point,

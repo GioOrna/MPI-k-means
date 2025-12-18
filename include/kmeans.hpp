@@ -33,21 +33,6 @@ int closest_centroid(const vector<double>& point,
 					 const vector<vector<double>>& centroids);
 
 /**
- * @brief Puts the cluster field of all nodes in the specified subtree equal to the specified value.
- * @param node The root of the subtree.
- * @param cluster The index of the cluster we want to assign.
- * @return void
- */
-void assign_to_cluster(const KDTree::Node* node, const int cluster);
-
-/**
- * @brief Calculates the midpoint of the subtree specified.
- * @param node The root of the subtree.
- * @return A vector of double containing the mipoint coordinates
- */
-vector<double> midpoint(const KDTree::Node* node);
-
-/**
  * @brief Tells if the node is farther from centroid in position c2 than the one in position c1
  * @param node The node to consider.
  * @param centroids The vector of centroids.
@@ -80,26 +65,12 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 double distance(vector<double> a, vector<double> b);
 
 /**
- * @brief Sums coordinates of all nodes in the subtree and keeps count of how many have been summed.
- * @param wgtCent Vector to which coordinates will be summed (it won't be resetted).
- * @param counts Int where the number of nodes will be summed (it won't be resetted).
- * @param node Root of the subtree.
- * @return void
- */
-void assign_subtree_to_cluster(vector<double>& wgtCent, int& counts,const KDTree::Node* node);
-
-/**
- * @brief Adds the centroids as points in the tree with new values in the cluster field to distinguish them from the other points.
- * @param tree The tree where we want to add the centroids
- * @param centroids Centroids we want to add.
- * @return void
- */
-void insert_centroid_in_tree(KDTree& tree, vector<vector<double>>& centroids);
-
-/**
  * @brief Sequential K-means algorithm, will update centroids with the new calculated centroids
  * @param centroids Centroids we want to update.
  * @param node The root of the tree we want to use. 
  */
-void Kmeans_sequential(vector<vector<double>>& centroids,
-			const KDTree::Node* node);
+void kmeans_sequential(vector<vector<double>>& centroids,
+			std::vector<std::vector<double>> data_to_work);
+
+vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>>& centroids,
+			std::vector<std::vector<double>> data_to_work);
