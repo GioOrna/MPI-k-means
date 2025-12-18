@@ -51,7 +51,8 @@ public:
         std::vector<double> point;         ///< Point coordinates in K dimensions
         std::unique_ptr<Node> left;        ///< Left subtree (points with smaller splitting coordinate)
         std::unique_ptr<Node> right;       ///< Right subtree (points with larger splitting coordinate)
-        mutable int cluster;               ///< Optional cluster assignment
+        std::vector<double> sum;           ///< Sum of all coordinates of all points in the subtree that has this node as root
+        int count;                         ///< Number of point of the subtree that has this point as root
 
         friend class KDTree;
 
@@ -80,17 +81,8 @@ public:
          */
         const Node* getRight() const;
 
-        /**
-         * @brief Set cluster assignment for this node.
-         * @param c Cluster ID
-         */
-        void setCluster(int c) const;
-
-        /**
-         * @brief Get cluster assignment.
-         * @return Cluster ID (default -1)
-         */
-        int getCluster() const { return cluster; }
+        std::vector<double> getSum() const;
+        int getCount() const;
     };
 
 private:
@@ -174,14 +166,6 @@ private:
      */
     void collectPoints(const std::unique_ptr<Node>& node,
                        std::vector<std::vector<double>>& points) const;
-
-    /**
-     * @brief Write all subtree points to CSV recursively.
-     * @param node Subtree root
-     * @param out Opened output file stream
-     */
-    void writeCSVRecursive(const std::unique_ptr<Node>& node,
-                           std::ofstream& out) const;
 
 public:
     /**
@@ -275,13 +259,7 @@ public:
      */
     Node* appendNode(const std::vector<double>& point);
 
-    /**
-     * @brief Write all tree points to a CSV file.
-     * Output format: x0,x1,...,x(K-1),BelongingCluster
-     * @param filename Name of output CSV file
-     * @throw std::runtime_error if file cannot be opened
-     */
-    void writeCSV(const std::string& filename) const;
+    void assignMidpointData(std::unique_ptr<KDTree::Node>& node);
 };
 
 #endif

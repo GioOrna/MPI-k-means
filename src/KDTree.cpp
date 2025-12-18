@@ -14,12 +14,13 @@ bool approxEqualPoint(const std::vector<double>& a,
 // ---- Node methods ----
 
 KDTree::Node::Node(const std::vector<double>& pt)
-    : point(pt), left(nullptr), right(nullptr), cluster(-1) {}
+    : point(pt), left(nullptr), right(nullptr), count(1) {}
 
 std::vector<double> KDTree::Node::getPoint() const { return point; }
 const KDTree::Node* KDTree::Node::getLeft() const { return left.get(); }
 const KDTree::Node* KDTree::Node::getRight() const { return right.get(); }
-void KDTree::Node::setCluster(int c) const { cluster = c; }
+std::vector<double> KDTree::Node::getSum() const { return sum; }
+int KDTree::Node::getCount() const {return count; }
 
 // ---- Validation ----
 
@@ -59,6 +60,7 @@ KDTree::KDTree(std::vector<std::vector<double>> points)
         validatePoints(points, K);
         root = buildTree(points, 0, points.size(), 0);
         node_count = countNodes(root);
+        assignMidpointData(root);
     }
 }
 
@@ -180,22 +182,6 @@ void KDTree::collectPoints(const std::unique_ptr<Node>& node,
     collectPoints(node->right, points);
 }
 
-void KDTree::writeCSVRecursive(const std::unique_ptr<Node>& node, 
-                               std::ofstream& out) const {
-    if (!node) return;
-    // Write point coordinates
-    for (size_t i = 0; i < node->point.size(); ++i) {
-        out << node->point[i];
-        out << ",";
-    }
-    out << node->cluster;
-    out << "\n";
-
-    // Recurse
-    writeCSVRecursive(node->left, out);
-    writeCSVRecursive(node->right, out);
-}
-
 void KDTree::build(std::vector<std::vector<double>> points) {
     if (points.empty()) {
         root.reset();  // Clears the unique_ptr
@@ -296,19 +282,38 @@ KDTree::Node* KDTree::appendNode(const std::vector<double>& point) {
     return parsing_node->right.get();
 }
 
-void KDTree::writeCSV(const std::string& filename) const {
-    std::ofstream out(filename);
-    if (!out.is_open()) {
-        throw std::runtime_error("Failed to open file: " + filename);
+// Calculates and assingns sum and count for each Node in the subtree with given root Node
+void KDTree::assignMidpointData(std::unique_ptr<KDTree::Node>& node) {
+    node->sum.resize(node->point.size());
+    // Base case: node is a leaf
+    if (node->left == nullptr and node->right == nullptr) {
+        for (int i = 0; i < node->point.size(); ++i)
+            node->sum[i] = node->point[i];
+        node->count = 1;
     }
-    // Header: x0,x1,...,x(K-1),BelongingCluster
-    for (size_t i = 0; i < K; ++i) {
-        out << "x" << i;
-        if (i < K - 1) out << ",";
+
+    else if (node->left == nullptr) {
+        assignMidpointData(node->right);
+        for (int i = 0; i < node->point.size(); ++i)
+           node->sum[i] = node->point[i] + node->right->sum[i];
+        node->count = node->right->count + 1;
     }
-    out << ",BelongingCluster\n";
 
-    writeCSVRecursive(root, out);
+    else if (node->right == nullptr) {
+        assignMidpointData(node->left);
+        for (int i = 0; i < node->point.size(); ++i)
+           node->sum[i] = node->point[i] + node->left->sum[i];
+        node->count = node->left->count + 1;
+    }
 
-    out.close();
+    else {
+        assignMidpointData(node->left);
+        assignMidpointData(node->right);
+        for (int i = 0; i < node->point.size(); ++i) {
+            node->sum[i] = node->point[i] + node->right->sum[i] + node->left->sum[i];
+        }
+        node->count = node->right->count + node->left->count + 1;
+    }
+
+    return;
 }
