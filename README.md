@@ -5,6 +5,7 @@ _Authors: Ruben Beria, Federica Censabella, Camilo Martínez, Alessandro Neri, G
 - [Introduction](#introduction)
 - [The filtering algorithm](#filtering_alg)
 - [Implementation](#implementation)
+- [Conclusions](#conclusions)
 - [References](#references)
 
 ## Introduction <span id="introduction"> </span>
@@ -35,16 +36,59 @@ In our implementation, the kd-tree is represented as a class `KDTree` containing
 
 The functions that are needed to exploit the actual clustering algorithm are contained in the `kmeans.hpp` header file; they use the tree-management methods to explore each node as described in the filtering algorithm explained above.
 
-In order to make the algorithm converge faster, we used MPI parallelism. After reading the dataset and generating the initial centroids, the process with rank 0 (referred to as the "master process") broadcasts them to all processes. The dataset is then evenly scattered among MPI processes (meaning that each process gets the same number of points, regardless of their spatial position), allowing each of them to construct its local kd-tree and analyze it using the filtering algorithm while keeping track of the weighted sums and counts of points assigned to each centroid. The partial results are then sent back to the master process which aggregates them to retrieve the new centroids and broadcast them to all processes.This procedure is repeated until convergence is reached.
+For the sake of making the algorithm converge faster, we used MPI parallelism. After reading the dataset and generating the initial centroids, the process with rank 0 (referred to as the "master process") broadcasts them to all processes. The dataset is then evenly scattered among MPI processes (meaning that each process gets the same number of points, regardless of their spatial position [*](#not-exact-division) ), allowing each of them to construct their local kd-tree and analyze it using the filtering algorithm while keeping track of the weighted sums and counts of points assigned to each centroid. The partial results are then sent back to the master process which aggregates them to retrieve the new centroids and broadcast them to all processes.This procedure is repeated until convergence is reached.
+
+In order to parallelize the given algorithm, we decided to apply a domain data decomposition and let each process build its own local tree based on a subset of the dataset instead of building one unique tree for the whole dataset as suggested in the paper [[1]](#ref_1). This approach allows us to share solely the centroids, thus minimizing the amount of data transfer, which is main overhead for MPI.
 
 Finally, each process calculates the clustering for its subset of data and sends the results back to the master process, which assembles the complete clustering and writes the output file.
 
-For testing and visualization purposes, we also provide two simple Python scripts to generate and plot the data.
+For testing and visualization purposes, we also provide two Python scripts to generate and plot the data. Also, in order to ensure that the most complex features woek, we wrote some tests available in the `/test` directory. 
+
+## Conclusions <span id="conclusions"> </span>
+At first we considered two possible approaches: the one described above and an algorithm that has the same structure as the one described in the paper [[1]](#ref_1). We ended up not choosing the second option because the code would have been less readable and less maitenable. That is due to the fact that the fork-join flow would have had to adapt to the tree structure and the communication of subtrees would have needed proper flattening and unflattening functions.
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="./images/3d_pairwise_projections.jpeg" width="400">
+      <br>
+      <em>Pairwise projections (3D)</em>
+    </td>
+    <td align="center">
+      <img src="./images/3d_plot.jpeg" width="400">
+      <br>
+      <em>3D cluster scatter</em>
+    </td>
+  </tr>
+</table>
+
+The provided visualizations illustrate the output of our clustering algorithm applied to a multidimensional dataset. The 3D scatter plot demonstrates the spatial distribution of the data points, which are organized into two distinct, well-defined globular cluster. Complementing this, the pairwise projection matrix offers a comprehensive view of the feature space by plotting every dimension against the others. This matrix confirms that the clusters maintain high separability across all planes, as evidenced by the clear gaps between point clouds and the distinct, non-overlapping peaks in the marginal density plots. Such clear separation indicates that the underlying features provide strong discriminative power for the classification task.
+
+### Strong scaling and weak scaling
+Strong scaling is defined as the variation in execution time for a fixed total problem size as the number of processors increases. This scaling is governed by Amdahl’s Law, which posits that the maximum speedup is strictly limited by the serial, non-parallelizable fraction of the code.In a plot of Execution Time vs. Processes we expect a hyperbolic decay because ideally, doubling the processors should halve the execution time. However, in real-world scenarios, the curve will eventually deviate from this ideal path and reach a plateau because, as the number of processes increases, the computational work per processor decreases while the relative overhead of communication and the constant serial execution time are constant so they eventually dominating the total runtime.
+Weak scaling describes how the execution time varies when the problem size per processor is kept constant, so as the number of processes increases, the total problem size grows proportionally. The objective is to determine the system's ability to handle larger, more complex simulations within a constant timeframe. This model is associated with Gustafson’s Law, which suggests that if the problem size is allowed to grow, the parallel efficiency can remain high.In a plot of Execution Time vs. Processes, the ideal trend is a constant horizontal line because theoretically, if the workload per processor is identical, the completion time should not change regardless of the number of nodes. In practice, we will likely observe a slight linear increase in execution time caused by the increased complexity of the communication network and the overhead required to synchronize a larger number of parallel tasks.
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="./images/strong_scaling.png" width="400">
+      <br>
+    </td>
+    <td align="center">
+      <img src="./images/weak_scaling.png" width="400">
+      <br>
+    </td>
+  </tr>
+</table>
+
+The results demonstrate a performance profile consistent with standard parallel computing laws: the strong scaling graph exhibits a hyperbolic decay, where execution time drops sharply as the first few processors are added before reaching a plateau caused by the non-parallelizable serial fraction of the code. In contrast, the weak scaling graph maintains a nearly constant trend with a slight positive slope, indicating that the system successfully handles an increasing workload proportional to the number of processors while incurring only minimal overhead from inter-process communication and synchronization.
 
 
 ## References <span id="references"> </span>
-
-
 1. <span id="ref_1"></span>Kanungo, T., Mount, D. M., Netanyahu, N. S., Piatko, C. D., Silverman, R., & Wu, A. Y. (2002). An efficient k-means clustering algorithm: Analysis and implementation. IEEE transactions on pattern analysis and machine intelligence, 24(7), 881-892.
 
 2. <span id="ref_2"></span>J.L. Bentley, "Multidimensional Binary Search Trees Used for Associative Searching," Comm. ACM, vol. 18, pp. 509-517, 1975.
+
+---
+
+\* <span id="not-exact-division"></span>Actually the first process gets more points for an optimization.
