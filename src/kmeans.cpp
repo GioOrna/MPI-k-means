@@ -181,8 +181,12 @@ vector<vector<double>> generate_centroids(const int num_centroids,
 										 const size_t dim,
 										 const vector<double>& max_values,
 										 const vector<double>& min_values) {
-	random_device rd;                // non-deterministic seed
-    mt19937 gen(rd());               // Mersenne Twister engine
+	#ifdef test
+		random_device rd;                // non-deterministic seed
+		mt19937 gen(rd());               // Mersenne Twister engine
+	#else
+		mt19937 gen(42);
+	#endif				
     vector<uniform_real_distribution<double>> dist;  // ranges
 	dist.resize(dim);
 	for(size_t i = 0; i < dim; ++i) {  // for each dimension define max and min

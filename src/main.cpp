@@ -12,6 +12,8 @@
 #include "../include/KDTree.hpp"
 #include "../include/MPI_utils.hpp"
 
+#define test
+
 using namespace std;
 
 int main(int argc, char* argv[]) {
@@ -46,9 +48,10 @@ int main(int argc, char* argv[]) {
 		} catch(const exception& e) {
 			cerr << "Error reading CSV file: " << e.what() << endl;
 			MPI_Abort(mpi_comm, 1);
-		}
-			centroids = generate_centroids(
-			num_centroids, data[0].size(), max_values, min_values);		
+		}		
+		centroids = generate_centroids(
+		num_centroids, data[0].size(), max_values, min_values);	
+	
 	}
 	vector<vector<double>> data_to_work = MPI_evenlyScatterData(data, mpi_comm);
 	centroids = kmeans_parallel(rank, size, centroids, data_to_work);
