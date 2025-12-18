@@ -73,10 +73,12 @@ Weak scaling describes how the execution time varies when the problem size per p
     <td align="center">
       <img src="./images/strong_scaling.png" width="400">
       <br>
+      <em>200000000000 3D points</em>
     </td>
     <td align="center">
       <img src="./images/weak_scaling.png" width="400">
       <br>
+      <em>62500000000 3D points per processor</em>
     </td>
   </tr>
 </table>
