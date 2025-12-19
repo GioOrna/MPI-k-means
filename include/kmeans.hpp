@@ -51,11 +51,12 @@ bool is_farther(const KDTree::Node* node,
  * @param ccentroids 2D vector of all centroids.
  * @param wgtCent 2D vector of sum of coordinates of points assigned to each centroid.
  * @param counts Vector of number of points assigned to each centroid.
+ * @param sum_internal_it Returns the number of recursive call done inside the filter function.
  * @return void
  */
 void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>>& centroids, 
-		    vector<vector<double>>& wgtCent, vector<int>& counts);
-
+		    vector<vector<double>>& wgtCent, vector<int>& counts, int& sum_internal_it);
+		
 /**
  * @brief Calculate squared Euclidean distance between two points.
  * @param a First point.
@@ -70,7 +71,7 @@ double distance(vector<double> a, vector<double> b);
  * @param data_to_work The data to work on. 
  */
 void kmeans_sequential(vector<vector<double>>& centroids,
-			std::vector<std::vector<double>> data_to_work);
+			std::vector<std::vector<double>> data_to_work, int& sum_internal_it);
 
 /**
  * @brief Parallel K-means algorithm, will update centroids with the new calculated centroids
@@ -80,4 +81,4 @@ void kmeans_sequential(vector<vector<double>>& centroids,
  * @param data_to_work The data to work on. 
  */
 vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>>& centroids,
-			std::vector<std::vector<double>> data_to_work);
+			std::vector<std::vector<double>> data_to_work, int& iterations, int& sum_internal_it);

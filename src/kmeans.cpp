@@ -1,9 +1,25 @@
 #include "../include/kmeans.hpp"
 #include "../include/MPI_utils.hpp"
+#include "../include/config.hpp"
+#ifdef test
+	#include <chrono>
+#endif
 
 vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>>& centroids,
-			std::vector<std::vector<double>> data_to_work){
+			std::vector<std::vector<double>> data_to_work, int& iterations, int& sum_internal_it){
+	#ifdef test
+		auto start = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double>  partial;
+	#endif
 	KDTree tree(data_to_work);
+	#ifdef test
+		auto end = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double> elapsed = end - start;
+    	std::cout << "Parallel time spent building tree: " << rank << " time: " << elapsed.count() << " seconds\n";
+		start = std::chrono::high_resolution_clock::now();
+		iterations=0;
+		sum_internal_it=0;
+	#endif
 	const KDTree::Node* node = tree.getRoot();
 	bool stabilized = false;
 	vector<vector<double>> old_centroids = centroids;
@@ -18,7 +34,18 @@ vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>
 		vector<int> candidates(centroids.size());
 		vector<vector<double>> wgtCent(centroids.size(), vector<double>(node->getPoint().size(), 0.0));
         vector<int> counts(centroids.size(), 0);
-		filter(node, candidates, centroids, wgtCent, counts);
+		#ifdef test
+			start = std::chrono::high_resolution_clock::now();
+			filter(node, candidates, centroids, wgtCent, counts, sum_internal_it);
+		#else
+		 	int not_used=0; 
+			filter(node, candidates, centroids, wgtCent, counts, not_used);
+		#endif
+		#ifdef test
+			auto end = std::chrono::high_resolution_clock::now();
+			partial = partial + (end-start);
+			iterations++;
+		#endif
 		gather_results(wgtCent, counts, 0, rank, size); //now rank0 has the sum
 		if(rank==0){
 			for(int i=0; i<centroids.size(); ++i){
@@ -39,6 +66,9 @@ vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>
 		}
 		broadcast_centroids(centroids, rank, 0); // Broadcast centroids to all processes.
 		if(centroids.empty()){
+			#ifdef test
+				cout << "Parallel time spent inside filter function: " << rank << " time: " << partial.count() << endl;
+			#endif
 			return old_centroids;
 		}
 	}
@@ -73,7 +103,8 @@ void kmeans_sequential(vector<vector<double>>& centroids,
 			for(int& cnt: counts){ // reset counts
 				cnt = 0;
 			}
-			filter(node, candidates, centroids, wgtCent, counts);
+			int sum_internal_it=0;
+			filter(node, candidates, centroids, wgtCent, counts, sum_internal_it);
 			for(int i=0; i<centroids.size(); ++i){
 				if(counts[i]>0){
 					for(int j=0; j<centroids[i].size(); ++j){
@@ -90,7 +121,10 @@ void kmeans_sequential(vector<vector<double>>& centroids,
 }
 
 void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>>& centroids, 
-		    vector<vector<double>>& wgtCent, vector<int>& counts){
+		    vector<vector<double>>& wgtCent, vector<int>& counts, int& sum_internal_it){
+	#ifdef test
+		sum_internal_it++;
+	#endif
 	if(u == nullptr){
 		return;
 	}
@@ -121,8 +155,8 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 			return;
 		}
 		else{
-			filter(u->getLeft(), candidates, centroids, wgtCent, counts);
-			filter(u->getRight(), candidates, centroids, wgtCent, counts);
+			filter(u->getLeft(), candidates, centroids, wgtCent, counts, sum_internal_it);
+			filter(u->getRight(), candidates, centroids, wgtCent, counts, sum_internal_it);
 			c = closest_centroid(u->getPoint(), centroids);
 			for(int i=0; i<wgtCent[c].size(); ++i){ // for each dimension sum the coordinate
 				wgtCent[c][i] += u->getPoint()[i];
@@ -182,10 +216,10 @@ vector<vector<double>> generate_centroids(const int num_centroids,
 										 const vector<double>& max_values,
 										 const vector<double>& min_values) {
 	#ifdef test
+		mt19937 gen(42);
+	#else
 		random_device rd;                // non-deterministic seed
 		mt19937 gen(rd());               // Mersenne Twister engine
-	#else
-		mt19937 gen(42);
 	#endif				
     vector<uniform_real_distribution<double>> dist;  // ranges
 	dist.resize(dim);

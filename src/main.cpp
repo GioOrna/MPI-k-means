@@ -6,13 +6,16 @@
 #include <random>
 #include <filesystem>
 #include <cassert>
+#include "../include/config.hpp"
+#ifdef test
+	#include <chrono>
+#endif
 
 #include "../include/csv_utils.hpp"
 #include "../include/kmeans.hpp"
 #include "../include/KDTree.hpp"
 #include "../include/MPI_utils.hpp"
 
-#define test
 
 using namespace std;
 
@@ -22,7 +25,11 @@ int main(int argc, char* argv[]) {
 	int rank, size;
 	MPI_Comm_rank(mpi_comm, &rank);
 	MPI_Comm_size(mpi_comm, &size);
-
+		
+	#ifdef test
+		auto start = std::chrono::high_resolution_clock::now();
+	#endif
+	
 	vector<vector<double>> data;
 	vector<vector<double>> centroids;
 	MPI_master() {
@@ -54,7 +61,27 @@ int main(int argc, char* argv[]) {
 	
 	}
 	vector<vector<double>> data_to_work = MPI_evenlyScatterData(data, mpi_comm);
-	centroids = kmeans_parallel(rank, size, centroids, data_to_work);
+	#ifdef test
+		if(rank==0){
+			auto end = std::chrono::high_resolution_clock::now();
+			std::chrono::duration<double> elapsed = end - start;
+			std::cout << "Elapsed time Sequential: " << elapsed.count() << " seconds\n";
+			start = std::chrono::high_resolution_clock::now();
+		}
+	#endif
+	int it=0;
+	int sum_internal_it=0;
+	centroids = kmeans_parallel(rank, size, centroids, data_to_work, it, sum_internal_it);
+	#ifdef test
+		if(rank==0){
+			auto end = std::chrono::high_resolution_clock::now();
+			std::chrono::duration<double> elapsed = end - start;
+			std::cout << "Elapsed time Parallel: " << elapsed.count() << " seconds\n";
+			start = std::chrono::high_resolution_clock::now();
+			cout << "iterations: " << it << endl;
+			cout << "iterations of filter algorithm on 1 process: " << sum_internal_it << endl;
+		}
+	#endif
 	broadcast_centroids(centroids, rank, 0);
 	vector<int> clustering = MPI_computeClustering(data, centroids);
 	MPI_master() {
