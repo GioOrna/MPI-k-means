@@ -27,10 +27,16 @@ vector<vector<double>> generate_centroids(const int num_centroids,
  * @brief Compute the closest centroid to the point.
  * @param point The point to be analyzed.
  * @param centroids The centroids to be analyzed.
+ * @param candidates List of indexes to check in the centroids vector.
  * @return The index of the closest centroid.
  */
 int closest_centroid(const vector<double>& point,
-					 const vector<vector<double>>& centroids);
+					 const vector<vector<double>>& centroids, vector<int> candidates);
+
+vector<vector<double>> generate_centroids_plus_plus(
+    const int num_centroids,
+    const size_t dim,
+    const vector<vector<double>>& data);
 
 /**
  * @brief Tells if the node is farther from centroid in position c2 than the one in position c1

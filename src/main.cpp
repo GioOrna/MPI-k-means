@@ -10,6 +10,7 @@
 #ifdef test
 	#include <chrono>
 #endif
+#include <algorithm>
 
 #include "../include/csv_utils.hpp"
 #include "../include/kmeans.hpp"
@@ -18,6 +19,16 @@
 
 
 using namespace std;
+
+void shuffleRows(std::vector<std::vector<double>>& data) {
+	#ifdef not_random
+		mt19937 gen(42);
+	#else
+		random_device rd;
+    	mt19937 gen(rd());   // Mersenne Twister RNG
+	#endif
+    shuffle(data.begin(), data.end(), gen);
+}
 
 int main(int argc, char* argv[]) {
 	MPI_Init(&argc, &argv);
@@ -28,6 +39,7 @@ int main(int argc, char* argv[]) {
 		
 	#ifdef test
 		auto start = std::chrono::high_resolution_clock::now();
+		auto start_total = std::chrono::high_resolution_clock::now();
 	#endif
 	
 	vector<vector<double>> data;
@@ -56,10 +68,11 @@ int main(int argc, char* argv[]) {
 			cerr << "Error reading CSV file: " << e.what() << endl;
 			MPI_Abort(mpi_comm, 1);
 		}		
-		centroids = generate_centroids(
-		num_centroids, data[0].size(), max_values, min_values);	
+		centroids = generate_centroids_plus_plus(
+		num_centroids, data[0].size(), data);	
 	
 	}
+	shuffleRows(data); //shuffles data to better distribute it
 	vector<vector<double>> data_to_work = MPI_evenlyScatterData(data, mpi_comm);
 	#ifdef test
 		if(rank==0){
@@ -79,8 +92,11 @@ int main(int argc, char* argv[]) {
 			std::cout << "Elapsed time Parallel: " << elapsed.count() << " seconds\n";
 			start = std::chrono::high_resolution_clock::now();
 			cout << "iterations: " << it << endl;
-			cout << "iterations of filter algorithm on 1 process: " << sum_internal_it << endl;
+			auto end_total = std::chrono::high_resolution_clock::now();
+			std::chrono::duration<double> elapsed_total = end_total - start_total;
+			std::cout << "Elapsed time Total: " << elapsed_total.count() << " seconds\n";
 		}
+		cout << "iterations of filter algorithm on rank: "<<rank <<" : " << sum_internal_it << endl;
 	#endif
 	broadcast_centroids(centroids, rank, 0);
 	vector<int> clustering = MPI_computeClustering(data, centroids);

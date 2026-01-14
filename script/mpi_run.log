@@ -1,0 +1,27 @@
+-0.765097, -0.174703, -1.06466, 
+1.05116, 0.445437, -0.0528162, 
+Elapsed time Sequential: 0.360733 seconds
+Parallel time spent building tree: 1 time: 0.0573151 seconds
+Parallel time spent building tree: 2 time: 0.060402 seconds
+Parallel time spent building tree: 4 time: 0.0598073 seconds
+Parallel time spent building tree: 5 time: 0.0612103 seconds
+Parallel time spent building tree: 3 time: 0.0617668 seconds
+Parallel time spent building tree: 0 time: 0.0616238 seconds
+Parallel time spent inside filter function: 3 time: 0.307274
+Parallel time spent inside filter function: 1 time: 0.328641
+Parallel time spent inside filter function: 5 time: 0.285428
+Parallel time spent inside filter function: 2 time: 0.300534
+Parallel time spent inside filter function: 4 time: 0.317255
+Parallel time spent inside filter function: 0 time: 0.32768
+iterations of filter algorithm on rank: 4 : 8728
+iterations of filter algorithm on rank: 3 : 8472
+iterations of filter algorithm on rank: 2 : 9646
+iterations of filter algorithm on rank: 1 : 9020
+Elapsed time Parallel: 0.466325 seconds
+iterations: 20
+iterations of filter algorithm on rank: 0 : 10192
+iterations of filter algorithm on rank: 5 : 9686
+Clustering results written to output600000_cluster.csv
+Notice: the result won't be a perfect clustering, but it gives a rough idea if the clustering of the row data points works properly or not.
+5.52user 0.38system 0:01.59elapsed 370%CPU (0avgtext+0avgdata 103560maxresident)k
+64inputs+34224outputs (178major+69024minor)pagefaults 0swaps

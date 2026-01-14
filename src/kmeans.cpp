@@ -32,6 +32,9 @@ vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>
 			stabilized = true;
 		}
 		vector<int> candidates(centroids.size());
+		for(int i=0;i<candidates.size();i++){
+			candidates[i] = i;
+		}
 		vector<vector<double>> wgtCent(centroids.size(), vector<double>(node->getPoint().size(), 0.0));
         vector<int> counts(centroids.size(), 0);
 		#ifdef test
@@ -48,9 +51,9 @@ vector<vector<double>> kmeans_parallel(int rank, int size, vector<vector<double>
 		#endif
 		gather_results(wgtCent, counts, 0, rank, size); //now rank0 has the sum
 		if(rank==0){
-			for(int i=0; i<centroids.size(); ++i){
+			for(int i=0; i<centroids.size(); ++i){ //for each centroids
 				if(counts[i]>0){
-					for(int j=0; j<centroids[i].size(); ++j){
+					for(int j=0; j<centroids[i].size(); ++j){ //for each dimension of the centroids
 						centroids[i][j] = wgtCent[i][j] / counts[i];
 						if(abs(centroids[i][j] - old_centroids[i][j]) > 1e-9){ // check for convergence
 							stabilized = false;
@@ -103,7 +106,7 @@ void kmeans_sequential(vector<vector<double>>& centroids,
 			for(int& cnt: counts){ // reset counts
 				cnt = 0;
 			}
-			int sum_internal_it=0;
+			int sum_internal_it;
 			filter(node, candidates, centroids, wgtCent, counts, sum_internal_it);
 			for(int i=0; i<centroids.size(); ++i){
 				if(counts[i]>0){
@@ -129,39 +132,40 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 		return;
 	}
 	if(u->getLeft() == nullptr && u->getRight() == nullptr){
-		int c = closest_centroid(u->getPoint(), centroids);
+		int c = closest_centroid(u->getPoint(), centroids, candidates);
 		for(int i=0; i<wgtCent[c].size(); ++i){ // for each dimension sum the coordinate
 			wgtCent[c][i] += u->getPoint()[i];
 		}
 		counts[c] += 1;
-		candidates.clear();
-		candidates.push_back(c);
 		return;
 	}else{
 		vector<double> midpoint = u->getSum();
 		for(int i=0; i<midpoint.size(); i++){
 			midpoint[i]/u->getCount();
 		}
-		int c = closest_centroid(midpoint, centroids);
-		for(int i = candidates.size() - 1; i >= 0; --i){
-    		if(c != candidates[i] && is_farther(u, centroids, candidates[i], c)){
+		int c = closest_centroid(midpoint, centroids, candidates);
+		for(int i = candidates.size() - 1; i >= 0; --i){ //for each candidate centroid
+    		if(c != candidates[i] && is_farther(u, centroids, c, candidates[i])){ 
         		candidates.erase(candidates.begin() + i);
     		}
 		}
 
-		if(candidates.size()==1){
-			wgtCent[c] = u->getSum();
-			counts[c] = u->getCount();
+		if(candidates.size()<=1){
+			vector<double> sum = u->getSum();
+			for(int i=0;i<sum.size();i++){
+				wgtCent[c][i] += sum[i];
+			}
+			counts[c] += u->getCount();
 			return;
 		}
 		else{
-			filter(u->getLeft(), candidates, centroids, wgtCent, counts, sum_internal_it);
-			filter(u->getRight(), candidates, centroids, wgtCent, counts, sum_internal_it);
-			c = closest_centroid(u->getPoint(), centroids);
+			c = closest_centroid(u->getPoint(), centroids, candidates);
 			for(int i=0; i<wgtCent[c].size(); ++i){ // for each dimension sum the coordinate
 				wgtCent[c][i] += u->getPoint()[i];
 			}
 			counts[c] += 1;
+			filter(u->getLeft(), candidates, centroids, wgtCent, counts, sum_internal_it);
+			filter(u->getRight(), candidates, centroids, wgtCent, counts, sum_internal_it);
 		}
 	}
 	return;
@@ -171,7 +175,7 @@ void filter(const KDTree::Node* u, vector<int> candidates, vector<vector<double>
 bool is_farther(const KDTree::Node* node,
 				const vector<vector<double>>& centroids,
 				const int c1,
-				const int c2){
+				const int c2){ //dist(c1) < dist(c2) for all points
 	if(node == nullptr)
 		return true;
 	
@@ -180,10 +184,13 @@ bool is_farther(const KDTree::Node* node,
 	if (dist1 > dist2 + 1e-9){
 		return false;
 	}
-	bool left = is_farther(node->getLeft(), centroids, c1, c2);
-	bool right = is_farther(node->getRight(), centroids, c1, c2);
-
-	return left && right;
+	if(!is_farther(node->getLeft(), centroids, c1, c2)){
+		return false;
+	};
+	if(!is_farther(node->getRight(), centroids, c1, c2)){
+		return false;
+	}
+	return true;
 }
 
 double distance(vector<double> a, vector<double> b){
@@ -195,10 +202,10 @@ double distance(vector<double> a, vector<double> b){
 }
 
 int closest_centroid(const vector<double>& point,
-					 const vector<vector<double>>& centroids){
+					 const vector<vector<double>>& centroids, vector<int> candidates){
 	double min_dist = std::numeric_limits<double>::max(); //set distance to max possible
 	int closest = -1;
-	for(size_t i = 0; i < centroids.size(); ++i){ //iterate over centroids
+	for(int i : candidates){ //iterate over centroids in candidates
 		double dist = 0.0;
 		for(size_t j = 0; j < point.size(); ++j){ //iterate over dimensions
 			dist += (point[j] - centroids[i][j]) * (point[j] - centroids[i][j]); //sum (over all dimensions) of distance squared
@@ -211,12 +218,79 @@ int closest_centroid(const vector<double>& point,
 	return closest;
 }
 
+vector<vector<double>> generate_centroids_plus_plus(
+    const int num_centroids,
+    const size_t dim,
+    const vector<vector<double>>& data
+) {
+#ifdef not_random
+    mt19937 gen(43);
+#else
+    random_device rd;
+    mt19937 gen(rd());
+#endif
+
+    vector<vector<double>> centroids;
+    centroids.reserve(num_centroids);
+
+    // 1️⃣ Pick first centroid randomly from data
+	#ifdef not_random
+	    centroids.push_back(data[0]);
+	#else
+		uniform_int_distribution<size_t> uni(0, data.size() - 1);
+    	centroids.push_back(data[uni(gen)]);
+	#endif
+
+	for(int i=0;i<centroids[0].size();i++){
+		cout << centroids[0][i] << ", ";
+	}
+	cout << endl;
+
+    // 2️⃣ Pick remaining centroids
+    for (int c = 1; c < num_centroids; ++c) { //for each centroid (except first)
+        vector<double> distances(data.size()); //make a distance vector of size all data
+        double total = 0.0;
+
+        // Distance to nearest centroid
+        for (size_t i = 0; i < data.size(); ++i) { //for each data
+            double min_dist = numeric_limits<double>::max();
+            for (const auto& centroid : centroids) { //find distance 
+                min_dist = min(min_dist,
+                               distance(data[i], centroid));
+            }
+            distances[i] = min_dist; //vector of minimum distance
+            total += min_dist;
+        }
+
+        // Sample proportional to distance²
+        uniform_real_distribution<double> dist(0.0, total);
+        double r = dist(gen);
+
+        double cumulative = 0.0;
+        for (size_t i = 0; i < data.size(); ++i) {
+            cumulative += distances[i];
+            if (cumulative >= r) {
+                centroids.push_back(data[i]);
+				for(int j=0;j<centroids[centroids.size()-1].size();j++){
+					cout << centroids[centroids.size()-1][j] << ", ";
+				}
+				cout << endl;
+                break;
+            }
+        }
+    }
+
+    return centroids;
+}
+
+
+
 vector<vector<double>> generate_centroids(const int num_centroids,
 										 const size_t dim,
 										 const vector<double>& max_values,
 										 const vector<double>& min_values) {
-	#ifdef test
-		mt19937 gen(42);
+	#ifdef not_random
+		mt19937 gen(43);
 	#else
 		random_device rd;                // non-deterministic seed
 		mt19937 gen(rd());               // Mersenne Twister engine
@@ -232,7 +306,9 @@ vector<vector<double>> generate_centroids(const int num_centroids,
 		centroids[i].resize(dim);
 		for(size_t j = 0; j < dim; ++j){  // for each dimension
 			centroids[i][j] = dist[j](gen);
+			cout << centroids[i][j] << ", ";
 		}
+		cout << endl;
 	}
 	return centroids;
 }	

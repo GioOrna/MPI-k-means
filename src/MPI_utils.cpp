@@ -220,8 +220,13 @@ vector<int> MPI_computeClustering(const vector<vector<double>>& data,
 
 	// Each process computes its local clustering.
 	vector<int> local_clustering(local_data.size());
+	
+	vector<int> all_candidates(centroids.size());
+	for(int i=0;i<all_candidates.size();i++){
+		all_candidates[i] = i;
+	}
 	for(size_t i = 0; i < local_data.size(); ++i)
-		local_clustering[i] = closest_centroid(local_data[i], local_centroids);
+		local_clustering[i] = closest_centroid(local_data[i], local_centroids, all_candidates);
 
 	// Gather the local clusterings to the master process.
 	return MPI_gatherUnbalancedData(local_clustering, MPI_COMM_WORLD);

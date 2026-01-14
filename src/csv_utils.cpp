@@ -20,10 +20,6 @@ void writeCSV(string input_file, std::vector<int> clustering, std::vector<std::v
 							 input_path.extension().string();
 
 		try {
-			// Open input and output files.
-			ifstream infile(input_file);
-			if(!infile.is_open())
-				throw runtime_error("Could not open input file for reading");
 			ofstream outfile(output_file);
 			if(!outfile.is_open())
 				throw runtime_error("Could not open output file for writing");
@@ -31,23 +27,23 @@ void writeCSV(string input_file, std::vector<int> clustering, std::vector<std::v
 			// Writing the file
 			string line;
 			size_t row_index = 0;
-			// Header line
-			getline(infile, line);
 			for(size_t j = 0; j < centroids[0].size(); ++j) {
 				outfile << "x"<<j<<",";
 			}
 			outfile <<"BelongingCluster\n";
 			// Data lines
-			while(getline(infile, line)) {
+			for(int i=0;i<data.size();i++) {
+				for(int j=0;j<data[i].size();j++){
+					outfile << data[i][j] << ",";
+				}
 				// Append clustering result to the line
-				if(row_index < clustering.size())
-					outfile << line << "," << clustering[row_index++] << "\n";
-				else{
-				cout << row_index << "asd" << endl;
-					assert(false && "Row index exceeds clustering size");
+				if(i<clustering.size()){
+				outfile << clustering[i] << "\n";
+				row_index++;
+				}else{
+					cout << "Error, clustering size is less than the data" << endl;
 				}
 			}
-			infile.close();
 			outfile.close();
 			assert(row_index == clustering.size() &&
 				   "All clustering results must be written to output file");
